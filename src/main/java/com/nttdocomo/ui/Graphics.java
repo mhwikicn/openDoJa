@@ -260,11 +260,15 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     public void unlock(boolean flush) {
         DoJaRuntime runtime = DoJaRuntime.current();
         BufferedImage presentedFrame = null;
+        boolean outermostUnlock = runtime == null || runtime.surfaceLock().getHoldCount() == 1;
         if (flush) {
             presentedFrame = copyImage(surface.image());
         }
         if (runtime != null) {
             runtime.surfaceLock().unlock();
+        }
+        if (outermostUnlock && !flush) {
+            surface.endDepthFrame();
         }
         if (flush) {
             surface.flush(presentedFrame);
@@ -399,6 +403,12 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         surface.flush(copyImage(surface.image()));
     }
 
+    private void prepare3DDepthFrame() {
+        // FFVII submits the track, ramp, and side props through separate 3D calls inside one
+        // lock/unlock frame. They must share one z-buffer or later props ignore ramp depth.
+        threeD.setFrameDepthBuffer(surface.depthBufferForFrame());
+    }
+
     private void applyFlipTransform(int dx, int dy, int dw, int dh) {
         switch (flipMode) {
             case FLIP_NONE -> {
@@ -529,6 +539,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             float[] objectMatrix = transform == null ? null : invokeHidden(transform, "raw", float[].class);
             if (object instanceof com.nttdocomo.ui.graphics3d.Figure figure) {
                 MascotFigure handle = invokeHidden(figure, "handle", MascotFigure.class);
+                prepare3DDepthFrame();
                 if (TRACE_3D_CALLS) {
                     int polygons = handle == null || handle.model() == null ? -1 : handle.model().polygons().length;
                     System.err.printf(
@@ -542,6 +553,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 threeD.renderUiFigure(delegate, surface.image(), originX, originY, surface.width(), surface.height(), handle, objectMatrix, invokeHiddenInt(object, "blendModeValue"), invokeHiddenFloat(object, "transparencyValue"));
             } else if (object instanceof com.nttdocomo.ui.graphics3d.Primitive primitive) {
                 SoftwareTexture texture = invokeHidden(primitive, "textureHandle", SoftwareTexture.class);
+                prepare3DDepthFrame();
                 if (TRACE_3D_CALLS) {
                     System.err.printf(
                             "3D call renderObject3D type=Primitive primitiveType=%d count=%d transform=%s%n",
@@ -634,6 +646,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         }
         try {
             MascotFigure handle = invokeHidden(figure, "handle", MascotFigure.class);
+            prepare3DDepthFrame();
             threeD.renderOptFigure(delegate, surface.image(), originX, originY, surface.width(), surface.height(), handle);
         } catch (RuntimeException e) {
             throw traceFailure("renderFigure", e);
@@ -725,6 +738,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int attr) {
+        prepare3DDepthFrame();
         threeD.renderOptPrimitives(delegate, surface.image(), originX, originY, surface.width(), surface.height(), primitives, attr);
     }
 

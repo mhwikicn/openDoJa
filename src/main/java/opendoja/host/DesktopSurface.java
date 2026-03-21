@@ -2,6 +2,7 @@ package opendoja.host;
 
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.function.Consumer;
 
@@ -9,6 +10,8 @@ public final class DesktopSurface {
     private BufferedImage image;
     private int backgroundColor = 0xFF000000;
     private Consumer<BufferedImage> repaintHook;
+    private float[] depthBuffer;
+    private boolean depthFrameActive;
 
     public DesktopSurface(int width, int height) {
         this.image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -23,6 +26,8 @@ public final class DesktopSurface {
         g2.drawImage(image, 0, 0, null);
         g2.dispose();
         this.image = resized;
+        this.depthBuffer = null;
+        this.depthFrameActive = false;
     }
 
     public BufferedImage image() {
@@ -49,7 +54,25 @@ public final class DesktopSurface {
         this.repaintHook = repaintHook;
     }
 
+    public synchronized float[] depthBufferForFrame() {
+        int pixelCount = image.getWidth() * image.getHeight();
+        if (depthBuffer == null || depthBuffer.length != pixelCount) {
+            depthBuffer = new float[pixelCount];
+            depthFrameActive = false;
+        }
+        if (!depthFrameActive) {
+            Arrays.fill(depthBuffer, Float.NEGATIVE_INFINITY);
+            depthFrameActive = true;
+        }
+        return depthBuffer;
+    }
+
+    public synchronized void endDepthFrame() {
+        depthFrameActive = false;
+    }
+
     public void flush(BufferedImage presentedFrame) {
+        endDepthFrame();
         if (repaintHook != null) {
             repaintHook.accept(presentedFrame);
         }

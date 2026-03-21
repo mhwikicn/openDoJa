@@ -50,6 +50,7 @@ public final class Software3DContext {
     private boolean optSemiTransparent;
     private SoftwareTexture[] primitiveTextures = new SoftwareTexture[0];
     private int primitiveTextureIndex;
+    private float[] frameDepthBuffer;
 
     public void setUiClip(int x, int y, int width, int height) {
         this.uiClip = new Rectangle(x, y, width, height);
@@ -140,6 +141,10 @@ public final class Software3DContext {
 
     public void setPrimitiveTexture(int index) {
         this.primitiveTextureIndex = index;
+    }
+
+    public void setFrameDepthBuffer(float[] frameDepthBuffer) {
+        this.frameDepthBuffer = frameDepthBuffer;
     }
 
     public void renderUiFigure(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
@@ -626,8 +631,11 @@ public final class Software3DContext {
         Shape oldClip = g.getClip();
         Composite oldComposite = g.getComposite();
         Rectangle effectiveClip = combineClip(target, oldClip, clip);
-        float[] depthBuffer = new float[target.getWidth() * target.getHeight()];
-        Arrays.fill(depthBuffer, Float.NEGATIVE_INFINITY);
+        float[] depthBuffer = frameDepthBuffer;
+        if (depthBuffer == null || depthBuffer.length != target.getWidth() * target.getHeight()) {
+            depthBuffer = new float[target.getWidth() * target.getHeight()];
+            Arrays.fill(depthBuffer, Float.NEGATIVE_INFINITY);
+        }
         try {
             if (effectiveClip != null) {
                 g.setClip(effectiveClip);
