@@ -17,9 +17,16 @@ import java.util.Map;
  * source for this renderer. Thanks to GuyPerfect for extracting and preserving the handset font
  * data used here.</p>
  *
- * <p>The dump provides only code points plus raw glyph bitmaps. Baseline/ascent metrics are not
- * stored in the source files, so the vertical metrics below remain inferred from the earlier
- * handset-font prototype and retained to keep existing DoJa layout call sites stable.</p>
+ * <p>Each size has a {@code code-points.dat} table plus one raw glyph-bitmap file. The code-point
+ * table is a list of 16-bit little-endian Unicode values in the same order as the glyphs appear in
+ * the bitmap file. The glyph file name encodes the bitmap height, and the stored bitmap width is
+ * the smallest multiple of eight that is at least that height. Every bit is one pixel with the
+ * left-most pixel in the MSB; set bits are foreground pixels and cleared bits are transparent.</p>
+ *
+ * <p>The dump also distinguishes half-width code points from full-width ones, so layout here keeps
+ * the handset width rules while blitting only the visible half-width columns. Baseline/ascent
+ * metrics are not stored in the source files, so the vertical metrics below remain inferred from
+ * the earlier handset-font prototype and retained to keep existing DoJa layout call sites stable.</p>
  */
 class _BitmapFont extends Font {
     private static final String RESOURCE_ROOT = "/opendoja/fonts/bitmap/";
