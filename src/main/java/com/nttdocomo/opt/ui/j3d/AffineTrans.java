@@ -181,10 +181,13 @@ public class AffineTrans {
         side.normalize();
         Vector3D actualUp = new Vector3D();
         actualUp.cross(side, forward);
+        // The orientation rows are 4.12 fixed-point unit vectors. The secondary cross-product
+        // therefore needs another normalization pass before it is stored into the matrix.
+        actualUp.normalize();
         setElement(
-                side.x, side.y, side.z, -side.dot(eye),
-                actualUp.x, actualUp.y, actualUp.z, -actualUp.dot(eye),
-                forward.x, forward.y, forward.z, -forward.dot(eye)
+                side.x, side.y, side.z, -viewTranslation(side, eye),
+                actualUp.x, actualUp.y, actualUp.z, -viewTranslation(actualUp, eye),
+                forward.x, forward.y, forward.z, -viewTranslation(forward, eye)
         );
     }
 
@@ -204,5 +207,11 @@ public class AffineTrans {
                 m20 / 4096f, m21 / 4096f, m22 / 4096f, m23,
                 0f, 0f, 0f, 1f
         };
+    }
+
+    private static int viewTranslation(Vector3D basis, Vector3D point) {
+        return FixedPoint.mul(basis.x, point.x)
+                + FixedPoint.mul(basis.y, point.y)
+                + FixedPoint.mul(basis.z, point.z);
     }
 }

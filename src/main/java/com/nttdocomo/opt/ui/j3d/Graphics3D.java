@@ -103,7 +103,7 @@ public interface Graphics3D {
 
     void renderPrimitives(PrimitiveArray primitives, int attr);
 
-    void renderPrimitives(PrimitiveArray primitives, int attr, int x, int y);
+    void renderPrimitives(PrimitiveArray primitives, int start, int count, int attr);
 
     void executeCommandList(int[] commands);
 }

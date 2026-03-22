@@ -424,7 +424,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void prepare3DDepthFrame() {
-        // FFVII submits the track, ramp, and side props through separate 3D calls inside one
+        // Games can submit 3D assets through separate 3D calls inside one
         // lock/unlock frame. They must share one z-buffer or later props ignore ramp depth.
         threeD.setFrameDepthBuffer(surface.depthBufferForFrame());
     }
@@ -629,7 +629,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenView(int x, int y) {
         try {
-            threeD.setOptScreenView(originX + x, originY + y);
+            // DoJa opt `setScreenView()` configures the parallel-projection extent, not a screen-space position.
+            threeD.setOptScreenView(x, y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenView", e);
         }
@@ -667,6 +668,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         try {
             MascotFigure handle = invokeHidden(figure, "handle", MascotFigure.class);
             prepare3DDepthFrame();
+            if (TRACE_3D_CALLS) {
+                System.err.printf("3D call renderFigure %s%n", describeOptFigure(handle));
+            }
             threeD.renderOptFigure(delegate, surface.image(), originX, originY, surface.width(), surface.height(), handle);
         } catch (RuntimeException e) {
             throw traceFailure("renderFigure", e);
@@ -692,15 +696,30 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void enableLight(boolean enabled) {
+        if (TRACE_3D_CALLS) {
+            System.err.printf("3D call enableLight enabled=%s%n", enabled);
+        }
         threeD.enableOptLight(enabled);
     }
 
     @Override
     public void setAmbientLight(int color) {
+        if (TRACE_3D_CALLS) {
+            System.err.printf("3D call setAmbientLight value=%d%n", color);
+        }
     }
 
     @Override
     public void setDirectionLight(com.nttdocomo.opt.ui.j3d.Vector3D direction, int color) {
+        if (TRACE_3D_CALLS) {
+            System.err.printf(
+                    "3D call setDirectionLight dir=(%d,%d,%d) value=%d%n",
+                    direction == null ? 0 : direction.x,
+                    direction == null ? 0 : direction.y,
+                    direction == null ? 0 : direction.z,
+                    color
+            );
+        }
     }
 
     @Override
@@ -711,7 +730,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setClipRect3D(int x, int y, int width, int height) {
         try {
-            threeD.setOptClip(originX + x, originY + y, width, height);
+            // `setClipRect3D()` is defined in absolute canvas coordinates and ignores Graphics.setOrigin().
+            threeD.setOptClip(x, y, width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setClipRect3D", e);
         }
@@ -735,12 +755,19 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void setPrimitiveTextureArray(com.nttdocomo.opt.ui.j3d.Texture texture) {
+        if (TRACE_3D_CALLS) {
+            SoftwareTexture handle = texture == null ? null : invokeHidden(texture, "handle", SoftwareTexture.class);
+            System.err.printf("3D call setPrimitiveTextureArray single texture=%s%n", describeTexture(handle));
+        }
         threeD.setPrimitiveTextures(texture == null ? null : new SoftwareTexture[]{invokeHidden(texture, "handle", SoftwareTexture.class)});
     }
 
     @Override
     public void setPrimitiveTextureArray(com.nttdocomo.opt.ui.j3d.Texture[] textures) {
         if (textures == null) {
+            if (TRACE_3D_CALLS) {
+                System.err.println("3D call setPrimitiveTextureArray array=null");
+            }
             threeD.setPrimitiveTextures(null);
             return;
         }
@@ -748,32 +775,55 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         for (int i = 0; i < textures.length; i++) {
             converted[i] = invokeHidden(textures[i], "handle", SoftwareTexture.class);
         }
+        if (TRACE_3D_CALLS) {
+            System.err.printf("3D call setPrimitiveTextureArray array=%s%n", describeTextures(converted));
+        }
         threeD.setPrimitiveTextures(converted);
     }
 
     @Override
     public void setPrimitiveTexture(int index) {
+        if (TRACE_3D_CALLS) {
+            System.err.printf("3D call setPrimitiveTexture index=%d%n", index);
+        }
         threeD.setPrimitiveTexture(index);
     }
 
     @Override
     public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int attr) {
         prepare3DDepthFrame();
+        if (TRACE_3D_CALLS && primitives != null) {
+            System.err.printf(
+                    "3D call renderPrimitives type=%d param=%d size=%d attr=%d textures=%s selectedTexture=%d%n",
+                    primitives.getType(),
+                    primitives.getParam(),
+                    primitives.size(),
+                    attr,
+                    describeTextures(threeD.primitiveTexturesSnapshot()),
+                    threeD.primitiveTextureIndex()
+            );
+        }
         threeD.renderOptPrimitives(delegate, surface.image(), originX, originY, surface.width(), surface.height(), primitives, attr);
     }
 
     @Override
-    public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int attr, int x, int y) {
-        int oldOriginX = originX;
-        int oldOriginY = originY;
-        try {
-            originX += x;
-            originY += y;
-            renderPrimitives(primitives, attr);
-        } finally {
-            originX = oldOriginX;
-            originY = oldOriginY;
+    public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int start, int count, int attr) {
+        prepare3DDepthFrame();
+        if (TRACE_3D_CALLS && primitives != null) {
+            System.err.printf(
+                    "3D call renderPrimitivesRange type=%d param=%d size=%d start=%d count=%d attr=%d textures=%s selectedTexture=%d%n",
+                    primitives.getType(),
+                    primitives.getParam(),
+                    primitives.size(),
+                    start,
+                    count,
+                    attr,
+                    describeTextures(threeD.primitiveTexturesSnapshot()),
+                    threeD.primitiveTextureIndex()
+            );
         }
+        // The three-int DoJa overload renders a slice of the PrimitiveArray.
+        threeD.renderOptPrimitivesRange(delegate, surface.image(), originX, originY, surface.width(), surface.height(), primitives, start, count, attr);
     }
 
     @Override
@@ -808,6 +858,59 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     private static float invokeHiddenFloat(Object target, String methodName) {
         return invokeHidden(target, methodName, Float.class);
+    }
+
+    private static String describeTextures(SoftwareTexture[] textures) {
+        if (textures == null) {
+            return "null";
+        }
+        String[] description = new String[textures.length];
+        for (int i = 0; i < textures.length; i++) {
+            description[i] = describeTexture(textures[i]);
+        }
+        return Arrays.toString(description);
+    }
+
+    private static String describeTexture(SoftwareTexture texture) {
+        if (texture == null) {
+            return "null";
+        }
+        return texture.width() + "x" + texture.height() + (texture.sphereMap() ? ":sphere" : ":model");
+    }
+
+    private static String describeOptFigure(MascotFigure figure) {
+        if (figure == null) {
+            return "figure=null";
+        }
+        int textureCount = figure.numTextures();
+        int polygonCount = figure.model() == null ? -1 : figure.model().polygons().length;
+        float[] vertices = figure.vertices();
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+        for (int i = 0; i + 2 < vertices.length; i += 3) {
+            minX = Math.min(minX, vertices[i]);
+            minY = Math.min(minY, vertices[i + 1]);
+            minZ = Math.min(minZ, vertices[i + 2]);
+            maxX = Math.max(maxX, vertices[i]);
+            maxY = Math.max(maxY, vertices[i + 1]);
+            maxZ = Math.max(maxZ, vertices[i + 2]);
+        }
+        return String.format(
+                "polygons=%d textures=%d pattern=%d bounds=[%.1f,%.1f,%.1f]->[%.1f,%.1f,%.1f]",
+                polygonCount,
+                textureCount,
+                figure.patternMask(),
+                minX,
+                minY,
+                minZ,
+                maxX,
+                maxY,
+                maxZ
+        );
     }
 
     private static Method findHiddenMethod(Class<?> type, String methodName) {

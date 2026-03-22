@@ -45,7 +45,15 @@ public final class Software3DContext {
     private int optScreenCenterY;
     private float optScaleX = 1f;
     private float optScaleY = 1f;
-    private float optFocal = 240f;
+    private float optViewWidth;
+    private float optViewHeight;
+    private float optNear = 1f;
+    private float optFar = 32767f;
+    private float optPerspectiveAngle = 512f;
+    private float optPerspectiveWidth = 240f;
+    private float optPerspectiveHeight = 240f;
+    private boolean optPerspectiveEnabled;
+    private boolean optPerspectiveUsesExtent;
     private boolean optLightingEnabled;
     private boolean optSemiTransparent;
     private SoftwareTexture[] primitiveTextures = new SoftwareTexture[0];
@@ -103,21 +111,33 @@ public final class Software3DContext {
     }
 
     public void setOptScreenScale(int x, int y) {
+        this.optPerspectiveEnabled = false;
         this.optScaleX = x == 0 ? 1f : x / 4096f;
         this.optScaleY = y == 0 ? 1f : y / 4096f;
     }
 
-    public void setOptScreenView(int x, int y) {
-        this.optScreenCenterX = x;
-        this.optScreenCenterY = y;
+    public void setOptScreenView(int width, int height) {
+        this.optPerspectiveEnabled = false;
+        this.optViewWidth = java.lang.Math.max(1f, width);
+        this.optViewHeight = java.lang.Math.max(1f, height);
     }
 
     public void setOptPerspective(int near, int far, int width) {
-        this.optFocal = java.lang.Math.max(32f, width);
+        // DoJa opt.ui.j3d treats the 3-int overload as a fixed-angle perspective call.
+        this.optPerspectiveEnabled = true;
+        this.optPerspectiveUsesExtent = false;
+        this.optNear = java.lang.Math.max(1f, near);
+        this.optFar = java.lang.Math.max(this.optNear + 1f, far);
+        this.optPerspectiveAngle = width;
     }
 
     public void setOptPerspective(int near, int far, int width, int height) {
-        this.optFocal = java.lang.Math.max(32f, java.lang.Math.max(width, height));
+        this.optPerspectiveEnabled = true;
+        this.optPerspectiveUsesExtent = true;
+        this.optNear = java.lang.Math.max(1f, near);
+        this.optFar = java.lang.Math.max(this.optNear + 1f, far);
+        this.optPerspectiveWidth = java.lang.Math.max(1f, width);
+        this.optPerspectiveHeight = java.lang.Math.max(1f, height);
     }
 
     public void enableOptLight(boolean enabled) {
@@ -143,6 +163,14 @@ public final class Software3DContext {
         this.primitiveTextureIndex = index;
     }
 
+    public SoftwareTexture[] primitiveTexturesSnapshot() {
+        return primitiveTextures.clone();
+    }
+
+    public int primitiveTextureIndex() {
+        return primitiveTextureIndex;
+    }
+
     public void setFrameDepthBuffer(float[] frameDepthBuffer) {
         this.frameDepthBuffer = frameDepthBuffer;
     }
@@ -153,36 +181,50 @@ public final class Software3DContext {
             return;
         }
         Projection projection = uiPerspective ? createUiProjection(surfaceWidth, surfaceHeight) : null;
-        renderModel(g, target, originX, originY, surfaceWidth, surfaceHeight, figure, objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform), projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, blendMode, transparency, uiAmbient, UI_FIGURE_VERTEX_SCALE);
+        renderModel(g, target, originX, originY, surfaceWidth, surfaceHeight, figure, objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform), projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true, false, blendMode, transparency, uiAmbient, UI_FIGURE_VERTEX_SCALE);
     }
 
     public void renderUiPrimitive(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                                   int primitiveType, int primitiveParam, int primitiveCount, int[] vertexArray, int[] colorArray,
                                   int[] textureCoordArray, SoftwareTexture texture, float[] objectTransform, int blendMode, float transparency) {
         Projection projection = uiPerspective ? createUiProjection(surfaceWidth, surfaceHeight) : null;
-        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam, primitiveCount, vertexArray, colorArray, textureCoordArray, texture, objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform), projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, blendMode, transparency);
+        // UI `Primitive` keeps the palette-zero color-key bit in primitiveParam, unlike opt `PrimitiveArray`.
+        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam, 0, primitiveCount, vertexArray, colorArray, textureCoordArray, texture, objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform), projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true, (primitiveParam & 0x10) != 0, blendMode, transparency, false, false);
     }
 
     public void renderOptFigure(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight, MascotFigure figure) {
         if (figure == null || figure.model() == null) {
             return;
         }
-        renderModel(g, target, originX, originY, surfaceWidth, surfaceHeight, figure, optViewTransform, createFocalProjection(optFocal), optClip, optScreenCenterX == 0 ? surfaceWidth / 2f : optScreenCenterX, optScreenCenterY == 0 ? surfaceHeight / 2f : optScreenCenterY, surfaceWidth / java.lang.Math.max(0.25f, optScaleX), surfaceHeight / java.lang.Math.max(0.25f, optScaleY), optSemiTransparent ? 32 : 0, optSemiTransparent ? 0.5f : 1f, optLightingEnabled ? 0.9f : 1f, 1f);
+        Projection projection = optPerspectiveEnabled ? createOptProjection(surfaceWidth, surfaceHeight) : null;
+        renderModel(g, target, originX, originY, surfaceWidth, surfaceHeight, figure, optViewTransform, projection, optClip,
+                optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
+                optSemiTransparent, true, 0, 1f, optLightingEnabled ? 0.9f : 1f, 1f);
     }
 
     public void renderOptPrimitives(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                                     PrimitiveArray primitives, int attr) {
+        renderOptPrimitivesRange(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives, 0, primitives == null ? 0 : primitives.size(), attr);
+    }
+
+    public void renderOptPrimitivesRange(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
+                                         PrimitiveArray primitives, int start, int count, int attr) {
         if (primitives == null) {
             return;
         }
         SoftwareTexture texture = primitiveTextures.length == 0 ? null : primitiveTextures[java.lang.Math.max(0, java.lang.Math.min(primitiveTextureIndex, primitiveTextures.length - 1))];
-        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives.getType(), primitives.getParam(), primitives.size(), primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), texture, optViewTransform, createFocalProjection(optFocal), optClip, optScreenCenterX == 0 ? surfaceWidth / 2f : optScreenCenterX, optScreenCenterY == 0 ? surfaceHeight / 2f : optScreenCenterY, surfaceWidth / java.lang.Math.max(0.25f, optScaleX), surfaceHeight / java.lang.Math.max(0.25f, optScaleY), attr, optSemiTransparent ? 0.5f : 1f);
+        // opt.ui.j3d keeps color-key and blend bits in the attr word supplied with each draw call.
+        Projection projection = optPerspectiveEnabled ? createOptProjection(surfaceWidth, surfaceHeight) : null;
+        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives.getType(), primitives.getParam(), start, count,
+                primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), texture, optViewTransform, projection, optClip,
+                optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
+                optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, true);
     }
 
     private void renderModel(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                              MascotFigure figure, float[] transform, Projection projection, Rectangle clip,
                              float centerX, float centerY, float orthoWidth, float orthoHeight,
-                             int blendMode, float transparency, float lightScale, float vertexScale) {
+                             boolean allowMaterialBlend, boolean invertScreenY, int blendMode, float transparency, float lightScale, float vertexScale) {
         MbacModel model = figure.model();
         int patternMask = figure.patternMask();
         float[] vertices = figure.vertices();
@@ -279,12 +321,12 @@ public final class Software3DContext {
                 if (projection != null) {
                     float cameraDepth = pointZ + projection.depthOffset();
                     xs[i] = originX + centerX + (pointX * projection.scaleX() / cameraDepth);
-                    ys[i] = originY + centerY + (pointY * projection.scaleY() / cameraDepth);
+                    ys[i] = projectScreenY(originY, centerY, pointY * projection.scaleY() / cameraDepth, invertScreenY);
                     depthValues[i] = 1.0f / java.lang.Math.max(0.0001f, cameraDepth);
                     avgDepth += cameraDepth;
                 } else {
                     xs[i] = originX + centerX + (pointX * (surfaceWidth / java.lang.Math.max(1f, orthoWidth)));
-                    ys[i] = originY + centerY + (pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)));
+                    ys[i] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), invertScreenY);
                     depthValues[i] = -pointZ;
                     avgDepth += pointZ;
                 }
@@ -294,7 +336,7 @@ public final class Software3DContext {
                 projectedMaxY = java.lang.Math.max(projectedMaxY, ys[i]);
             }
             avgDepth /= vertexCount;
-            int effectiveBlendMode = blendMode | polygon.blendMode();
+            int effectiveBlendMode = allowMaterialBlend ? (blendMode | polygon.blendMode()) : blendMode;
             SoftwareTexture polygonTexture = textureCoords == null ? null : figure.texture(polygon.textureIndex());
             if (polygonTexture != null) {
                 int modulationColor = scaleColor(0xFFFFFFFF, transparency, lightScale);
@@ -324,11 +366,12 @@ public final class Software3DContext {
     }
 
     private void renderPrimitiveBuffer(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
-                                       int primitiveType, int primitiveParam, int primitiveCount, int[] vertexArray,
+                                       int primitiveType, int primitiveParam, int primitiveStart, int primitiveCount, int[] vertexArray,
                                        int[] colorArray, int[] textureCoordArray, SoftwareTexture texture,
                                        float[] transform, Projection projection, Rectangle clip,
                                        float centerX, float centerY, float orthoWidth, float orthoHeight,
-                                       int blendMode, float transparency) {
+                                       boolean allowBlend, boolean transparentPaletteZero, int blendMode, float transparency,
+                                       boolean unsignedByteTextureCoords, boolean invertScreenY) {
         if (vertexArray == null) {
             return;
         }
@@ -339,9 +382,11 @@ public final class Software3DContext {
             case 4 -> 4;
             default -> 3;
         };
-        boolean transparentPaletteZero = (primitiveParam & 0x10) != 0;
+        int start = java.lang.Math.max(0, primitiveStart);
+        int end = java.lang.Math.max(start, java.lang.Math.min(start + java.lang.Math.max(0, primitiveCount), vertexArray.length / (verticesPerPrimitive * 3)));
+        int effectiveBlendMode = allowBlend ? blendMode : 0;
         List<ProjectedPolygon> projected = new ArrayList<>();
-        for (int primitive = 0; primitive < primitiveCount; primitive++) {
+        for (int primitive = start; primitive < end; primitive++) {
             int vertexBase = primitive * verticesPerPrimitive * 3;
             if (vertexBase + verticesPerPrimitive * 3 > vertexArray.length) {
                 break;
@@ -361,7 +406,11 @@ public final class Software3DContext {
                 uv = new float[verticesPerPrimitive * 2];
                 int uvBase = primitive * verticesPerPrimitive * 2;
                 for (int i = 0; i < uv.length; i++) {
-                    uv[i] = textureCoordArray[uvBase + i];
+                    int coordinate = textureCoordArray[uvBase + i];
+                    // opt.ui.j3d primitive texture coordinates are consumed as unsigned bytes by the
+                    // original renderer, so animated scrolling can legitimately pass through negative
+                    // or >255 values before they wrap back into the 8-bit texture domain.
+                    uv[i] = unsignedByteTextureCoords ? (coordinate & 0xFF) : coordinate;
                 }
             }
             if (projection != null) {
@@ -385,12 +434,12 @@ public final class Software3DContext {
                 if (projection != null) {
                     float cameraDepth = pointZ + projection.depthOffset();
                     xs[i] = originX + centerX + (pointX * projection.scaleX() / java.lang.Math.max(0.0001f, cameraDepth));
-                    ys[i] = originY + centerY + (pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth));
+                    ys[i] = projectScreenY(originY, centerY, pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth), invertScreenY);
                     depthValues[i] = 1.0f / java.lang.Math.max(0.0001f, cameraDepth);
                     avgDepth += cameraDepth;
                 } else {
                     xs[i] = originX + centerX + (pointX * (surfaceWidth / java.lang.Math.max(1f, orthoWidth)));
-                    ys[i] = originY + centerY + (pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)));
+                    ys[i] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), invertScreenY);
                     depthValues[i] = -pointZ;
                     avgDepth += pointZ;
                 }
@@ -399,23 +448,31 @@ public final class Software3DContext {
             int color = scaleColor(colorForPrimitive(primitive, primitiveParam, colorArray), transparency, 1f);
             if (texture != null && vertexCount >= 3 && uv != null) {
                 if (primitiveType == 4 && vertexCount == 4) {
-                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, transparentPaletteZero, blendMode);
+                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, transparentPaletteZero, effectiveBlendMode);
                 } else {
-                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, true, transparentPaletteZero, blendMode);
+                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, true, transparentPaletteZero, effectiveBlendMode);
                 }
                 continue;
             }
             if (primitiveType == 2) {
-                projected.add(new ProjectedPolygon(xs, ys, depthValues, color, avgDepth, false, null, null, false, false, blendMode));
+                projected.add(new ProjectedPolygon(xs, ys, depthValues, color, avgDepth, false, null, null, false, false, effectiveBlendMode));
             } else {
                 if (primitiveType == 4 && vertexCount == 4) {
-                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, false, blendMode);
+                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, false, effectiveBlendMode);
                 } else {
-                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, true, false, blendMode);
+                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, true, false, effectiveBlendMode);
                 }
             }
         }
         drawProjected(g, target, projected, clip);
+    }
+
+    // openDoJa shares one software renderer across the DoJa UI `graphics3d` API and the opt
+    // `ui.j3d` API, but they do not land on the same final screen-space Y convention. Keep the
+    // API split explicit here so the opt path can map +Y upward in camera space onto the
+    // downward-growing 2D screen without regressing the already-correct UI path.
+    private static float projectScreenY(int originY, float centerY, float projectedOffsetY, boolean invertScreenY) {
+        return originY + centerY + (invertScreenY ? -projectedOffsetY : projectedOffsetY);
     }
 
     private static void addProjectedPrimitiveQuad(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues,
@@ -1078,9 +1135,29 @@ public final class Software3DContext {
         return new Projection(uiPerspectiveNear, uiPerspectiveFar, pixelScale, pixelScale, 0f);
     }
 
-    private static Projection createFocalProjection(float focal) {
-        float depth = java.lang.Math.max(32f, focal);
-        return new Projection(1f, Float.POSITIVE_INFINITY, depth, depth, 0f);
+    private Projection createOptProjection(int surfaceWidth, int surfaceHeight) {
+        if (optPerspectiveUsesExtent) {
+            float scaleX = surfaceWidth * optNear / java.lang.Math.max(1f, optPerspectiveWidth);
+            float scaleY = surfaceHeight * optNear / java.lang.Math.max(1f, optPerspectiveHeight);
+            return new Projection(optNear, optFar, scaleX, scaleY, 0f);
+        }
+        float radians = normalizeOptPerspectiveRadians(optPerspectiveAngle);
+        float pixelScale = (surfaceWidth * 0.5f) / (float) java.lang.Math.tan(radians * 0.5f);
+        return new Projection(optNear, optFar, pixelScale, pixelScale, 0f);
+    }
+
+    private float resolveOptOrthoWidth(int surfaceWidth) {
+        if (optViewWidth > 0f) {
+            return optViewWidth;
+        }
+        return surfaceWidth / java.lang.Math.max(0.25f, optScaleX);
+    }
+
+    private float resolveOptOrthoHeight(int surfaceHeight) {
+        if (optViewHeight > 0f) {
+            return optViewHeight;
+        }
+        return surfaceHeight / java.lang.Math.max(0.25f, optScaleY);
     }
 
     private static float normalizeNear(float rawNear) {
@@ -1102,6 +1179,16 @@ public final class Software3DContext {
                 ? (float) java.lang.Math.toDegrees(rawAngle)
                 : rawAngle;
         return java.lang.Math.max(1f, java.lang.Math.min(179f, degrees));
+    }
+
+    private static float normalizeOptPerspectiveRadians(float rawAngle) {
+        if (rawAngle <= 0f) {
+            return (float) java.lang.Math.toRadians(45f);
+        }
+        float radians = rawAngle <= 2047f
+                ? (float) (rawAngle * java.lang.Math.PI / 2048.0)
+                : (float) java.lang.Math.toRadians(rawAngle);
+        return java.lang.Math.max((float) java.lang.Math.toRadians(1f), java.lang.Math.min((float) java.lang.Math.toRadians(179f), radians));
     }
 
     private static float[] transformPoint(float[] matrix, float x, float y, float z) {

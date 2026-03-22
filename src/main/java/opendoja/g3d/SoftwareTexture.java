@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 public final class SoftwareTexture {
+    private static final boolean TRACE_3D_CALLS = Boolean.getBoolean("opendoja.debug3dCalls");
     private final BufferedImage image;
     private final boolean sphereMap;
     private final int[] indexedPixels;
@@ -20,6 +21,18 @@ public final class SoftwareTexture {
         this.indexedPixels = decoded.indexedPixels();
         this.indexedColorModel = decoded.indexedColorModel();
         this.sphereMap = !forModel;
+        if (TRACE_3D_CALLS) {
+            int transparentPixels = countTransparentPixels(this.image, this.indexedPixels, this.indexedColorModel);
+            System.err.printf(
+                    "3D texture decode forModel=%s size=%dx%d indexed=%s transparentPixels=%d bytes=%d%n",
+                    forModel,
+                    this.image.getWidth(),
+                    this.image.getHeight(),
+                    this.indexedPixels != null,
+                    transparentPixels,
+                    bytes == null ? -1 : bytes.length
+            );
+        }
     }
 
     public SoftwareTexture(InputStream inputStream, boolean forModel) throws IOException {
@@ -89,6 +102,31 @@ public final class SoftwareTexture {
 
     private static int clamp(int value, int min, int max) {
         return java.lang.Math.max(min, java.lang.Math.min(max, value));
+    }
+
+    private static int countTransparentPixels(BufferedImage image, int[] indexedPixels, IndexColorModel colorModel) {
+        if (image == null) {
+            return 0;
+        }
+        int width = image.getWidth();
+        int height = image.getHeight();
+        int transparent = 0;
+        if (indexedPixels != null && colorModel != null) {
+            for (int index : indexedPixels) {
+                if (((colorModel.getRGB(index) >>> 24) & 0xFF) == 0) {
+                    transparent++;
+                }
+            }
+            return transparent;
+        }
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (((image.getRGB(x, y) >>> 24) & 0xFF) == 0) {
+                    transparent++;
+                }
+            }
+        }
+        return transparent;
     }
 
     private static byte[] readAllBytes(InputStream inputStream) throws IOException {
