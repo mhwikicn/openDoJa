@@ -2,6 +2,7 @@ package com.nttdocomo.ui;
 
 import opendoja.audio.SampledPcmPlayer;
 import opendoja.audio.mld.MldPcmPlayer;
+import opendoja.host.DoJaProfile;
 import opendoja.host.DoJaRuntime;
 
 import javax.sound.midi.MidiSystem;
@@ -86,7 +87,7 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
 
     public void play(int loopCount) {
         registerWithRuntime();
-        stop();
+        stopPlayback();
         if (!(resource instanceof MediaManager.BasicMediaSound sound)) {
             notifyListener(AUDIO_STOPPED, 0);
             return;
@@ -184,6 +185,14 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
 
     @Override
     public void stop() {
+        if (requiresStrictStopState() && !hasUsableMediaResource()) {
+            throw new UIException(UIException.ILLEGAL_STATE);
+        }
+        stopPlayback();
+        notifyListener(AUDIO_STOPPED, 0);
+    }
+
+    private void stopPlayback() {
         if (sampledPlayer != null) {
             sampledPlayer.stop();
         }
@@ -195,12 +204,11 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         if (mldPlayer != null) {
             mldPlayer.stop();
         }
-        notifyListener(AUDIO_STOPPED, 0);
     }
 
     @Override
     public void close() {
-        stop();
+        stopPlayback();
         if (sampledPlayer != null) {
             sampledPlayer.close();
             sampledPlayer = null;
@@ -245,6 +253,20 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
 
     private int currentVolumeLevel() {
         return Math.max(0, Math.min(100, attributes.getOrDefault(SET_VOLUME, 100)));
+    }
+
+    private boolean hasUsableMediaResource() {
+        if (resource == null) {
+            return false;
+        }
+        if (resource instanceof MediaManager.AbstractMediaResource tracked) {
+            return tracked.isUsed();
+        }
+        return true;
+    }
+
+    private boolean requiresStrictStopState() {
+        return DoJaProfile.current().isAtLeast(2, 0);
     }
 
     private final class MldListener implements MldPcmPlayer.Listener {

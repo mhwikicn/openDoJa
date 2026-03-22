@@ -215,9 +215,11 @@ public final class MediaManager {
     static abstract class AbstractMediaResource implements MediaResource {
         private final Map<String, String> properties = new HashMap<>();
         private boolean redistributable = true;
+        private boolean used;
 
         @Override
         public void use() throws ConnectionException {
+            used = true;
         }
 
         @Override
@@ -227,10 +229,12 @@ public final class MediaManager {
 
         @Override
         public void unuse() {
+            used = false;
         }
 
         @Override
         public void dispose() {
+            used = false;
         }
 
         @Override
@@ -252,6 +256,10 @@ public final class MediaManager {
         public boolean setRedistributable(boolean redistributable) {
             this.redistributable = redistributable;
             return true;
+        }
+
+        final boolean isUsed() {
+            return used;
         }
     }
 
@@ -319,6 +327,7 @@ public final class MediaManager {
         public void use() throws ConnectionException {
             try {
                 prepared();
+                super.use();
             } catch (IOException e) {
                 ConnectionException failure = new ConnectionException(ConnectionException.NO_RESOURCE, e.getMessage());
                 failure.initCause(e);
