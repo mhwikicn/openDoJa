@@ -85,18 +85,21 @@ class _BitmapFont extends Font {
 
     @Override
     public int getBBoxHeight(String text) {
-        String value = text == null ? "" : text;
+        String value = Font.requireString(text, "text");
+        if (value.isEmpty()) {
+            return 0;
+        }
         return value.split("\\n", -1).length * strike.lineHeight;
     }
 
     @Override
     public int getBBoxHeight(XString text) {
-        return getBBoxHeight(text == null ? null : text.toString());
+        return getBBoxHeight(Font.requireXString(text, "text"));
     }
 
     @Override
     public int getBBoxWidth(String text) {
-        String value = text == null ? "" : text;
+        String value = Font.requireString(text, "text");
         int width = 0;
         for (String line : value.split("\\r?\\n", -1)) {
             width = Math.max(width, lineWidth(line));
@@ -106,15 +109,12 @@ class _BitmapFont extends Font {
 
     @Override
     public int getBBoxWidth(XString text) {
-        return getBBoxWidth(text == null ? null : text.toString());
+        return getBBoxWidth(Font.requireXString(text, "text"));
     }
 
     @Override
     public int getBBoxWidth(XString text, int offset, int length) {
-        String value = text == null ? "" : text.toString();
-        int start = Math.max(0, offset);
-        int end = Math.min(value.length(), start + Math.max(0, length));
-        return getBBoxWidth(value.substring(start, end));
+        return getBBoxWidth(Font.slice(Font.requireXString(text, "text"), offset, length));
     }
 
     @Override

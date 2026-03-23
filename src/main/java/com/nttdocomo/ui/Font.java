@@ -13,21 +13,91 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Defines character types.
+ * The font class handles fonts and font metrics.
+ *
+ * <p>There are two ways to specify a font to {@code getFont}.
+ * One way is to specify a type.
+ * The other way is to specify the font face, style, and size.
+ * If the specified font is not supported by the device, an alternative font
+ * object is returned.
+ * Depending on the system, font objects may be created statically, and the
+ * same object may be returned when the same font type is specified.</p>
+ *
+ * <p>Since DoJa-3.0 (505i), the initial default font is
+ * {@code FACE_SYSTEM|SIZE_TINY|STYLE_PLAIN}.
+ * {@link #getDefaultFont()} returns the font set by
+ * {@link #setDefaultFont(Font)}; if no font has been set, it returns the
+ * initial default font.</p>
+ *
+ * <p>Since DoJa-5.0 (903i), font size can be specified in dots by
+ * {@link #getFont(int, int)}.</p>
+ */
 public class Font {
     private static final float HANDSET_FONT_SCALE = Float.parseFloat(System.getProperty("opendoja.fontScale", "0.85"));
     private static final Object TEXT_ANTIALIAS_HINT = resolveTextAntialiasHint();
+    /**
+     * A font type that represents the default font ({@code =0x00000000}).
+     * Since DoJa-3.0 (505i), it means the initial default font
+     * {@code FACE_SYSTEM|SIZE_TINY|STYLE_PLAIN}.
+     */
     public static final int TYPE_DEFAULT = 0;
+    /**
+     * A font type that represents a heading font ({@code =0x00000001}).
+     * This may not be supported depending on the handset.
+     */
     public static final int TYPE_HEADING = 1;
+    /**
+     * The system-font face ({@code =0x71000000}).
+     */
     public static final int FACE_SYSTEM = 0x71000000;
+    /**
+     * The monospace-font face ({@code =0x72000000}).
+     * This may not be supported depending on the handset.
+     */
     public static final int FACE_MONOSPACE = 0x72000000;
+    /**
+     * The proportional-font face ({@code =0x73000000}).
+     * This may not be supported depending on the handset.
+     */
     public static final int FACE_PROPORTIONAL = 0x73000000;
+    /**
+     * The plain font style ({@code =0x70100000}).
+     */
     public static final int STYLE_PLAIN = 0x70100000;
+    /**
+     * The bold font style ({@code =0x70110000}).
+     * This may not be supported depending on the handset.
+     */
     public static final int STYLE_BOLD = 0x70110000;
+    /**
+     * The italic font style ({@code =0x70120000}).
+     * This may not be supported depending on the handset.
+     */
     public static final int STYLE_ITALIC = 0x70120000;
+    /**
+     * The bold-italic font style ({@code =0x70130000}).
+     * This may not be supported depending on the handset.
+     */
     public static final int STYLE_BOLDITALIC = 0x70130000;
+    /**
+     * The small font size ({@code =0x70000100}).
+     * Since DoJa-4.0 (901i), this is a required font size.
+     */
     public static final int SIZE_SMALL = 0x70000100;
+    /**
+     * The medium font size ({@code =0x70000200}).
+     */
     public static final int SIZE_MEDIUM = 0x70000200;
+    /**
+     * The large font size ({@code =0x70000300}).
+     * Since DoJa-4.0 (901i), this is a required font size.
+     */
     public static final int SIZE_LARGE = 0x70000300;
+    /**
+     * The tiny font size ({@code =0x70000400}).
+     */
     public static final int SIZE_TINY = 0x70000400;
 
     private static final BufferedImage METRICS_IMAGE = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
@@ -37,10 +107,20 @@ public class Font {
     private final java.awt.Font awtFont;
     private java.awt.FontMetrics metrics;
 
+    /**
+     * Applications cannot directly create instances of this class.
+     */
     protected Font() {
         this(new java.awt.Font(java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12));
     }
 
+    /**
+     * Creates a DoJa font wrapper around a desktop font.
+     * This constructor is for host-side integration and is not part of the
+     * official DoJa API surface.
+     *
+     * @param awtFont the wrapped desktop font
+     */
     protected Font(java.awt.Font awtFont) {
         this.awtFont = awtFont == null ? new java.awt.Font(java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12) : awtFont;
     }
@@ -49,16 +129,44 @@ public class Font {
         this(resolveBaseFont(face).deriveFont(resolveAwtStyle(style), (float) resolveDesktopPointSize(face, resolveBaseFont(face), resolveAwtStyle(style), size)));
     }
 
+    /**
+     * Gets the default font.
+     * Since DoJa-3.0 (505i), this returns the font object set by
+     * {@link #setDefaultFont(Font)}.
+     * Initially, it returns {@code FACE_SYSTEM|SIZE_TINY|STYLE_PLAIN}.
+     *
+     * @return the default-font object
+     */
     public static Font getDefaultFont() {
         return defaultFont;
     }
 
+    /**
+     * Sets the default font.
+     * Except for the initial state, {@link #getDefaultFont()} returns the font
+     * object set by this method.
+     *
+     * @param font the font object to set as the default font
+     * @throws NullPointerException if {@code font} is {@code null}
+     */
     public static void setDefaultFont(Font font) {
-        if (font != null) {
-            defaultFont = font;
+        if (font == null) {
+            throw new NullPointerException("font");
         }
+        defaultFont = font;
     }
 
+    /**
+     * Gets the font object specified by the argument.
+     * The font can be specified either by a type or by the bitwise OR of face,
+     * style, and size constants.
+     * If a font of the specified type is not supported, an alternative font is
+     * returned.
+     *
+     * @param value the font type
+     * @return the font object
+     * @throws IllegalArgumentException if {@code value} is invalid
+     */
     public static Font getFont(int value) {
         if (value == TYPE_HEADING) {
             return createFont(FACE_SYSTEM, STYLE_BOLD, decodeSize(SIZE_LARGE));
@@ -66,68 +174,208 @@ public class Font {
         if (value == TYPE_DEFAULT) {
             return getDefaultFont();
         }
+        validateTypeBits(value);
         return createFont(FACE_SYSTEM, STYLE_PLAIN, decodeSize(value));
     }
 
+    /**
+     * Gets a font object from the specified font type and the font size
+     * specified in dots.
+     * The size part in {@code type} is ignored.
+     * Unlike {@link #getFont(int)}, {@code TYPE_DEFAULT} and
+     * {@code TYPE_HEADING} cannot be specified in {@code type}.
+     *
+     * @param faceAndStyle the font type
+     * @param size the font size in dots
+     * @return the font object
+     * @throws UnsupportedOperationException if the handset does not support
+     *         this method
+     * @throws IllegalArgumentException if {@code size} is unsupported or if
+     *         {@code faceAndStyle} is invalid
+     */
     public static Font getFont(int faceAndStyle, int size) {
+        if (faceAndStyle == TYPE_DEFAULT || faceAndStyle == TYPE_HEADING) {
+            throw new IllegalArgumentException("faceAndStyle");
+        }
+        validateTypeBits(faceAndStyle);
+        if (size <= 0) {
+            throw new IllegalArgumentException("size");
+        }
         return createFont(decodeFace(faceAndStyle), decodeStyle(faceAndStyle), decodeSize(size));
     }
 
+    /**
+     * Gets an array of the font sizes, in dots, supported by this handset.
+     * The returned array is a copy of the array held internally by this
+     * object.
+     *
+     * @return an array of the supported font sizes in ascending order
+     * @throws UnsupportedOperationException if the handset does not support
+     *         this method
+     */
     public static int[] getSupportedFontSizes() {
         return _BitmapFont.getSupportedFontSizes();
     }
 
+    /**
+     * Gets the font ascent, the distance from the baseline to the upper edge.
+     *
+     * @return the font ascent
+     */
     public int getAscent() {
         return metrics().getAscent();
     }
 
+    /**
+     * Gets the font descent, the distance from the baseline to the lower edge.
+     *
+     * @return the font descent
+     */
     public int getDescent() {
         return metrics().getDescent();
     }
 
+    /**
+     * Gets the font height.
+     * This value is equal to the sum of the ascent and the descent.
+     *
+     * @return the font height
+     */
     public int getHeight() {
         java.awt.FontMetrics metrics = metrics();
         return metrics.getAscent() + metrics.getDescent();
     }
 
+    /**
+     * Gets the width of the specified string.
+     *
+     * @param text the string
+     * @return the width required to display the string
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int stringWidth(String text) {
-        return metrics().stringWidth(text == null ? "" : text);
+        return metrics().stringWidth(requireString(text, "text"));
     }
 
+    /**
+     * Gets the width of the string in the specified {@code XString}.
+     *
+     * @param text the {@code XString}
+     * @return the width required to display the string
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int stringWidth(XString text) {
-        return stringWidth(text == null ? null : text.toString());
+        return stringWidth(requireXString(text, "text"));
     }
 
+    /**
+     * Gets the width of part of the string in the specified {@code XString}.
+     *
+     * @param text the {@code XString}
+     * @param offset the offset of the string to calculate
+     * @param length the length of the string to calculate
+     * @return the width required to display the substring
+     * @throws NullPointerException if {@code text} is {@code null}
+     * @throws StringIndexOutOfBoundsException if {@code offset} is negative, if
+     *         {@code length} is negative, or if {@code offset} or
+     *         {@code offset + length} exceeds the string length
+     */
     public int stringWidth(XString text, int offset, int length) {
-        String value = text == null ? "" : text.toString();
-        int start = Math.max(0, offset);
-        int end = Math.min(value.length(), start + Math.max(0, length));
-        return stringWidth(value.substring(start, end));
+        return stringWidth(slice(requireXString(text, "text"), offset, length));
     }
 
+    /**
+     * Gets the width of the bounding box of the specified string.
+     *
+     * @param text the string
+     * @return the width
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int getBBoxWidth(String text) {
         return stringWidth(text);
     }
 
+    /**
+     * Gets the width of the bounding box of the string in the specified
+     * {@code XString}.
+     *
+     * @param text the {@code XString}
+     * @return the width
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int getBBoxWidth(XString text) {
         return stringWidth(text);
     }
 
+    /**
+     * Gets the width of the bounding box of part of the string in the
+     * specified {@code XString}.
+     *
+     * @param text the {@code XString}
+     * @param offset the offset of the string to calculate
+     * @param length the length of the string to calculate
+     * @return the width
+     * @throws NullPointerException if {@code text} is {@code null}
+     * @throws StringIndexOutOfBoundsException if {@code offset} is negative, if
+     *         {@code length} is negative, or if {@code offset} or
+     *         {@code offset + length} exceeds the string length
+     */
     public int getBBoxWidth(XString text, int offset, int length) {
         return stringWidth(text, offset, length);
     }
 
+    /**
+     * Gets the height of the bounding box of the specified string.
+     * Since DoJa-3.0 (505i), if {@code text} is the empty string
+     * ({@code ""}), {@code 0} is returned.
+     *
+     * @param text the string
+     * @return the height
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int getBBoxHeight(String text) {
-        return getHeight();
+        return requireString(text, "text").isEmpty() ? 0 : getHeight();
     }
 
+    /**
+     * Gets the height of the bounding box of the string in the specified
+     * {@code XString}.
+     * If the {@code XString} contains the empty string, {@code 0} is returned.
+     *
+     * @param text the {@code XString}
+     * @return the height
+     * @throws NullPointerException if {@code text} is {@code null}
+     */
     public int getBBoxHeight(XString text) {
-        return getHeight();
+        return getBBoxHeight(requireXString(text, "text"));
     }
 
+    /**
+     * Gets the line-break position of the specified string.
+     * If the width of the substring of length {@code length} from
+     * {@code offset} is greater than {@code width}, this returns the position
+     * of the string that becomes the beginning of the next line.
+     * If the width is less than or equal to {@code width}, {@code offset + length}
+     * is returned.
+     *
+     * @param text the string
+     * @param offset the offset of the string to calculate
+     * @param length the length of the string to calculate
+     * @param width the line width in pixels
+     * @return the offset of the next line-break position
+     * @throws NullPointerException if {@code text} is {@code null}
+     * @throws StringIndexOutOfBoundsException if {@code offset} is negative, if
+     *         {@code length} is negative, or if {@code offset} or
+     *         {@code offset + length} exceeds the string length
+     * @throws IllegalArgumentException if {@code width} is negative
+     */
     public int getLineBreak(String text, int offset, int length, int width) {
-        String value = text == null ? "" : text;
-        int limit = Math.min(value.length(), offset + length);
+        String value = requireString(text, "text");
+        validateSubstringRange(value, offset, length);
+        if (width < 0) {
+            throw new IllegalArgumentException("width");
+        }
+        int limit = offset + length;
         int current = offset;
         while (current < limit) {
             if (stringWidth(value.substring(offset, current + 1)) > width) {
@@ -135,11 +383,26 @@ public class Font {
             }
             current++;
         }
-        return current - offset;
+        return current;
     }
 
+    /**
+     * Gets the line-break position of the string in the specified
+     * {@code XString}.
+     *
+     * @param text the {@code XString}
+     * @param offset the offset of the string to calculate
+     * @param length the length of the string to calculate
+     * @param width the line width in pixels
+     * @return the offset of the next line-break position
+     * @throws NullPointerException if {@code text} is {@code null}
+     * @throws StringIndexOutOfBoundsException if {@code offset} is negative, if
+     *         {@code length} is negative, or if {@code offset} or
+     *         {@code offset + length} exceeds the string length
+     * @throws IllegalArgumentException if {@code width} is negative
+     */
     public int getLineBreak(XString text, int offset, int length, int width) {
-        return getLineBreak(text == null ? "" : text.toString(), offset, length, width);
+        return getLineBreak(requireXString(text, "text"), offset, length, width);
     }
 
     java.awt.Font awtFont() {
@@ -179,6 +442,37 @@ public class Font {
     private static Font createFont(int face, int style, int size) {
         Font bitmap = _BitmapFont.create(face, style, size);
         return bitmap != null ? bitmap : new Font(face, style, size);
+    }
+
+    static String requireString(String text, String name) {
+        if (text == null) {
+            throw new NullPointerException(name);
+        }
+        return text;
+    }
+
+    static String requireXString(XString text, String name) {
+        if (text == null) {
+            throw new NullPointerException(name);
+        }
+        return text.toString();
+    }
+
+    static String slice(String text, int offset, int length) {
+        validateSubstringRange(text, offset, length);
+        return text.substring(offset, offset + length);
+    }
+
+    static void validateSubstringRange(String text, int offset, int length) {
+        if (offset < 0 || length < 0 || offset > text.length() || offset + length > text.length()) {
+            throw new StringIndexOutOfBoundsException();
+        }
+    }
+
+    private static void validateTypeBits(int value) {
+        if ((value & 0x70000000) != 0x70000000) {
+            throw new IllegalArgumentException("type");
+        }
     }
 
     private static int resolveAwtStyle(int style) {

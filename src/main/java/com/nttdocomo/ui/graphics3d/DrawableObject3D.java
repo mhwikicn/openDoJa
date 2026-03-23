@@ -16,7 +16,7 @@ public abstract class DrawableObject3D extends Object3D {
     }
 
     public boolean isCross(DrawableObject3D other, Transform thisTransform, Transform otherTransform) {
-        return false;
+        return _DrawableCollisionSupport.isCross(this, other, thisTransform, otherTransform);
     }
 
     public abstract void setPerspectiveCorrectionEnabled(boolean enabled);

@@ -12,12 +12,15 @@ import java.net.URL;
 import java.net.URLConnection;
 
 public final class DesktopHttpConnection implements HttpConnection {
+    private static final String DEFAULT_USER_AGENT = "DoCoMo/2.0 DOJA_INET_CLIENT(c100;TJ)";
+
     private final URL url;
     private final int mode;
     private final boolean timeouts;
     private HttpURLConnection connection;
     private String requestMethod = GET;
     private long ifModifiedSince = 0L;
+    private boolean userAgentProvidedByGame;
 
     public DesktopHttpConnection(URL url, int mode, boolean timeouts) {
         this.url = url;
@@ -28,7 +31,13 @@ public final class DesktopHttpConnection implements HttpConnection {
     @Override
     public void connect() throws IOException {
         ensureConnection();
-        connection.connect();
+        debug(() -> "HTTP connect " + requestSummary());
+        try {
+            connection.connect();
+        } catch (IOException exception) {
+            OpenDoJaLog.warn(DesktopHttpConnection.class, "HTTP connect failed " + requestSummary(), exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -41,7 +50,15 @@ public final class DesktopHttpConnection implements HttpConnection {
     @Override
     public InputStream openInputStream() throws IOException {
         ensureConnection();
-        return connection.getInputStream();
+        debug(() -> "HTTP openInputStream " + requestSummary());
+        try {
+            InputStream stream = connection.getInputStream();
+            debug(() -> "HTTP input ready " + responseSummary());
+            return stream;
+        } catch (IOException exception) {
+            OpenDoJaLog.warn(DesktopHttpConnection.class, "HTTP openInputStream failed " + requestSummary(), exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -53,7 +70,13 @@ public final class DesktopHttpConnection implements HttpConnection {
     public OutputStream openOutputStream() throws IOException {
         ensureConnection();
         connection.setDoOutput(true);
-        return connection.getOutputStream();
+        debug(() -> "HTTP openOutputStream " + requestSummary());
+        try {
+            return connection.getOutputStream();
+        } catch (IOException exception) {
+            OpenDoJaLog.warn(DesktopHttpConnection.class, "HTTP openOutputStream failed " + requestSummary(), exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -69,6 +92,7 @@ public final class DesktopHttpConnection implements HttpConnection {
     @Override
     public void setRequestMethod(String method) throws IOException {
         this.requestMethod = method;
+        debug(() -> "HTTP setRequestMethod method=" + method + " url=" + url);
         if (connection != null) {
             connection.setRequestMethod(method);
         }
@@ -76,14 +100,25 @@ public final class DesktopHttpConnection implements HttpConnection {
 
     @Override
     public void setRequestProperty(String key, String value) throws IOException {
+        if (isUserAgentHeader(key)) {
+            userAgentProvidedByGame = true;
+        }
         ensureConnection();
+        debug(() -> "HTTP setRequestProperty " + key + "=" + value + " url=" + url);
         connection.setRequestProperty(key, value);
     }
 
     @Override
     public int getResponseCode() throws IOException {
         ensureConnection();
-        return connection.getResponseCode();
+        try {
+            int code = connection.getResponseCode();
+            debug(() -> "HTTP response " + responseSummary(code));
+            return code;
+        } catch (IOException exception) {
+            OpenDoJaLog.warn(DesktopHttpConnection.class, "HTTP getResponseCode failed " + requestSummary(), exception);
+            throw exception;
+        }
     }
 
     @Override
@@ -179,6 +214,7 @@ public final class DesktopHttpConnection implements HttpConnection {
             throw new IOException("Unsupported non-HTTP URL: " + url);
         }
         connection = httpURLConnection;
+        debug(() -> "HTTP create " + requestSummary());
         connection.setRequestMethod(requestMethod);
         connection.setInstanceFollowRedirects(true);
         connection.setUseCaches(false);
@@ -192,5 +228,48 @@ public final class DesktopHttpConnection implements HttpConnection {
             connection.setIfModifiedSince(ifModifiedSince);
         }
         connection.setRequestProperty("Connection", "keep-alive");
+        if (!userAgentProvidedByGame) {
+            debug(() -> "HTTP default User-Agent " + DEFAULT_USER_AGENT + " url=" + url);
+            connection.setRequestProperty("User-Agent", DEFAULT_USER_AGENT);
+        }
+    }
+
+    private static boolean isUserAgentHeader(String key) {
+        return key != null && "User-Agent".equalsIgnoreCase(key);
+    }
+
+    private void debug(java.util.function.Supplier<String> messageSupplier) {
+        OpenDoJaLog.debug(DesktopHttpConnection.class, messageSupplier);
+    }
+
+    private String requestSummary() {
+        return "method=" + requestMethod
+                + " url=" + url
+                + " mode=" + mode
+                + " timeouts=" + timeouts;
+    }
+
+    private String responseSummary() {
+        int code;
+        try {
+            code = connection.getResponseCode();
+        } catch (IOException exception) {
+            code = -1;
+        }
+        return responseSummary(code);
+    }
+
+    private String responseSummary(int code) {
+        String message;
+        try {
+            message = connection.getResponseMessage();
+        } catch (IOException exception) {
+            message = "<unavailable:" + exception.getClass().getSimpleName() + ">";
+        }
+        return requestSummary()
+                + " code=" + code
+                + " message=" + message
+                + " type=" + connection.getContentType()
+                + " length=" + connection.getContentLengthLong();
     }
 }

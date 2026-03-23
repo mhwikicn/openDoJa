@@ -19,7 +19,7 @@ public abstract class Object3D {
     public static final int TYPE_GROUP = 7;
     public static final int TYPE_GROUP_MESH = 8;
 
-    private final int type;
+    private int type;
     private int time;
 
     protected Object3D(int type) {
@@ -55,6 +55,7 @@ public abstract class Object3D {
     }
 
     public void dispose() {
+        type = TYPE_NONE;
     }
 
     public int getType() {

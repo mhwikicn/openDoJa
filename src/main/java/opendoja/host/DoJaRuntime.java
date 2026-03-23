@@ -1,5 +1,6 @@
 package opendoja.host;
 
+import com.nttdocomo.opt.ui.PhoneSystem2;
 import com.nttdocomo.ui.Canvas;
 import com.nttdocomo.ui.Display;
 import com.nttdocomo.ui.Frame;
@@ -26,10 +27,12 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -45,7 +48,6 @@ public final class DoJaRuntime {
     private static volatile DoJaRuntime current;
 
     private final LaunchConfig config;
-    private final IApplication application;
     private final AtomicBoolean shutdown = new AtomicBoolean();
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     private final ReentrantLock surfaceLock = new ReentrantLock(true);
@@ -61,17 +63,20 @@ public final class DoJaRuntime {
     });
     private final AtomicBoolean renderQueued = new AtomicBoolean();
     private final Set<AutoCloseable> shutdownResources = ConcurrentHashMap.newKeySet();
+    private final Map<Canvas, Long> lastCanvasTimerEventNanos = Collections.synchronizedMap(new WeakHashMap<>());
     private final HostPanel hostPanel;
+    private volatile IApplication application;
     private JFrame frameWindow;
     private Frame currentFrame;
     private volatile Canvas presentedCanvas;
     private volatile BufferedImage presentedFrame;
     private volatile int keypadState;
     private volatile long selectLatchedUntilNanos;
+    private String previousMicroeditionPlatform;
+    private boolean restoreMicroeditionPlatform;
 
-    private DoJaRuntime(LaunchConfig config, IApplication application) {
+    private DoJaRuntime(LaunchConfig config) {
         this.config = config;
-        this.application = application;
         this.hostPanel = new HostPanel(this);
     }
 
@@ -91,12 +96,23 @@ public final class DoJaRuntime {
         PREPARED_LAUNCH.remove();
     }
 
-    public static DoJaRuntime bootstrap(LaunchConfig config, IApplication application) {
-        DoJaRuntime runtime = new DoJaRuntime(config, application);
-        current = runtime;
+    public static DoJaRuntime bootstrap(LaunchConfig config) {
+        DoJaRuntime runtime = new DoJaRuntime(config);
         runtime.createScratchpadRoot();
         runtime.createWindowIfPossible();
+        current = runtime;
+        runtime.applyLaunchSystemProperties();
+        PhoneSystem2.resetRuntimeDefaults();
         return runtime;
+    }
+
+    public static void bindPreparedApplication(IApplication application) {
+        DoJaRuntime runtime = current;
+        LaunchConfig prepared = PREPARED_LAUNCH.get();
+        if (runtime == null || prepared == null || !prepared.applicationClass().isInstance(application)) {
+            return;
+        }
+        runtime.attachApplication(application);
     }
 
     public static DoJaRuntime current() {
@@ -117,6 +133,18 @@ public final class DoJaRuntime {
 
     public IApplication application() {
         return application;
+    }
+
+    public void attachApplication(IApplication application) {
+        Objects.requireNonNull(application, "application");
+        IApplication attached = this.application;
+        if (attached == application) {
+            return;
+        }
+        if (attached != null) {
+            throw new IllegalStateException("Runtime already attached to " + attached.getClass().getName());
+        }
+        this.application = application;
     }
 
     public int displayWidth() {
@@ -144,10 +172,22 @@ public final class DoJaRuntime {
     }
 
     public void startApplication() {
-        application.start();
+        IApplication app = application;
+        if (app == null) {
+            throw new IllegalStateException("No application attached to runtime");
+        }
+        app.start();
     }
 
     public void shutdown() {
+        shutdown(config.exitOnShutdown());
+    }
+
+    void abortLaunch() {
+        shutdown(false);
+    }
+
+    private void shutdown(boolean exitProcess) {
         if (!shutdown.compareAndSet(false, true)) {
             return;
         }
@@ -157,11 +197,12 @@ public final class DoJaRuntime {
         if (frameWindow != null) {
             SwingUtilities.invokeLater(() -> frameWindow.dispose());
         }
+        restoreLaunchSystemProperties();
         if (current == this) {
             current = null;
         }
         shutdownLatch.countDown();
-        if (config.exitOnShutdown()) {
+        if (exitProcess) {
             System.exit(0);
         }
     }
@@ -267,11 +308,12 @@ public final class DoJaRuntime {
 
     public int keypadState() {
         int state = keypadState;
-        if (MINIMUM_SELECT_PRESS_NANOS <= 0L || (state & keyMask(Display.KEY_SELECT)) != 0) {
+        int selectMask = keyMask(Display.KEY_SELECT);
+        if (MINIMUM_SELECT_PRESS_NANOS <= 0L) {
             return state;
         }
         if (selectLatchedUntilNanos > System.nanoTime()) {
-            return state | keyMask(Display.KEY_SELECT);
+            return state | selectMask;
         }
         return state;
     }
@@ -280,6 +322,7 @@ public final class DoJaRuntime {
         if (shutdown.get()) {
             return;
         }
+        lastCanvasTimerEventNanos.put(canvas, System.nanoTime());
         if (TRACE_EVENTS) {
             OpenDoJaLog.debug(DoJaRuntime.class, () -> "timer event canvas=" + canvas.getClass().getName() + " param=" + param);
         }
@@ -295,8 +338,6 @@ public final class DoJaRuntime {
                 // Some DoJa games derive edge-triggered confirm input from polled keypad-state snapshots
                 // rather than from KEY_PRESSED_EVENT callbacks. If a desktop tap begins and ends between
                 // two polls, the sampled state is 0 at both reads and the edge disappears completely.
-                // Keep KEY_SELECT visible for a short minimum dwell window so a fast desktop confirm tap
-                // survives at least one poll without changing long-hold behavior.
                 selectLatchedUntilNanos = now + MINIMUM_SELECT_PRESS_NANOS;
             }
         } else if (eventType == Display.KEY_RELEASED_EVENT) {
@@ -310,6 +351,9 @@ public final class DoJaRuntime {
                 OpenDoJaLog.debug(DoJaRuntime.class, () -> "key event type=" + eventType + " key=" + dojaKey + " canvas=" + canvas.getClass().getName());
             }
             canvas.processEvent(eventType, dojaKey);
+            if (eventType == Display.KEY_PRESSED_EVENT) {
+                wakeDirectCanvasSync(canvas);
+            }
             repaintWindow();
         };
         if (SwingUtilities.isEventDispatchThread()) {
@@ -320,7 +364,7 @@ public final class DoJaRuntime {
     }
 
     public InputStream openResourceStream(String path) throws IOException {
-        return openResourceStream(path, config, application.getClass().getClassLoader());
+        return openResourceStream(path, config, config.applicationClass().getClassLoader());
     }
 
     public static InputStream openLaunchResourceStream(String path) throws IOException {
@@ -343,6 +387,25 @@ public final class DoJaRuntime {
             presentedFrame = frame == null ? snapshotCanvasImage(canvas) : frame;
             repaintWindow();
         }
+    }
+
+    private void wakeDirectCanvasSync(Canvas canvas) {
+        if (!usesDirectGraphicsMode(canvas)) {
+            return;
+        }
+        Object surface = invokeCanvasMethod(canvas, "surface", new Class<?>[0]);
+        if (surface instanceof DesktopSurface desktopSurface) {
+            long syncIntervalNanos = desktopSurface.syncUnlockIntervalNanos();
+            if (syncIntervalNanos > 0L && hasRecentCanvasTimerEvent(canvas, syncIntervalNanos)) {
+                return;
+            }
+            desktopSurface.wakeSyncUnlockWait();
+        }
+    }
+
+    private boolean hasRecentCanvasTimerEvent(Canvas canvas, long windowNanos) {
+        Long lastTimerNanos = lastCanvasTimerEventNanos.get(canvas);
+        return lastTimerNanos != null && System.nanoTime() - lastTimerNanos < windowNanos;
     }
 
     private void ensureCanvasSurface(Canvas canvas) {
@@ -508,6 +571,7 @@ public final class DoJaRuntime {
         return 1 << keyCode;
     }
 
+
     private void closeShutdownResources() {
         for (AutoCloseable resource : shutdownResources.toArray(AutoCloseable[]::new)) {
             try {
@@ -517,6 +581,38 @@ public final class DoJaRuntime {
                 shutdownResources.remove(resource);
             }
         }
+    }
+
+    private void applyLaunchSystemProperties() {
+        previousMicroeditionPlatform = System.getProperty("microedition.platform");
+        String launchPlatform = launchMicroeditionPlatform();
+        if ((previousMicroeditionPlatform == null || previousMicroeditionPlatform.isBlank())
+                && launchPlatform != null
+                && !launchPlatform.isBlank()) {
+            System.setProperty("microedition.platform", launchPlatform);
+            restoreMicroeditionPlatform = true;
+        }
+    }
+
+    private void restoreLaunchSystemProperties() {
+        if (!restoreMicroeditionPlatform) {
+            return;
+        }
+        if (previousMicroeditionPlatform == null) {
+            System.clearProperty("microedition.platform");
+        } else {
+            System.setProperty("microedition.platform", previousMicroeditionPlatform);
+        }
+        restoreMicroeditionPlatform = false;
+        previousMicroeditionPlatform = null;
+    }
+
+    private String launchMicroeditionPlatform() {
+        String targetDevice = config.parameters().get("TargetDevice");
+        if (targetDevice != null && !targetDevice.isBlank()) {
+            return targetDevice.trim();
+        }
+        return "openDoJa";
     }
 
     private int mapKeyCode(int awtKeyCode) {

@@ -14,15 +14,22 @@ public final class DesktopLauncher {
     }
 
     public static IApplication launch(LaunchConfig config) {
+        DoJaRuntime runtime = null;
+        boolean launched = false;
         try {
             DoJaRuntime.prepareLaunch(config);
+            runtime = DoJaRuntime.bootstrap(config);
             IApplication app = config.applicationClass().getDeclaredConstructor().newInstance();
-            DoJaRuntime runtime = DoJaRuntime.bootstrap(config, app);
+            runtime.attachApplication(app);
             runtime.startApplication();
+            launched = true;
             return app;
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException("Failed to launch " + config.applicationClass().getName(), e);
         } finally {
+            if (!launched && runtime != null) {
+                runtime.abortLaunch();
+            }
             DoJaRuntime.clearPreparedLaunch();
         }
     }

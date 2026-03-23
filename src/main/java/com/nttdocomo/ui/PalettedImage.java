@@ -16,7 +16,8 @@ public class PalettedImage extends Image {
     private byte[] pixels;
     private Palette palette;
     private int transparentIndex = -1;
-    private boolean transparentEnabled = true;
+    private int appliedTransparentIndex = -1;
+    private boolean transparentEnabled;
 
     public static PalettedImage createPalettedImage(byte[] data) {
         if (data == null) {
@@ -57,6 +58,7 @@ public class PalettedImage extends Image {
     }
 
     public void changeData(InputStream inputStream) {
+        ensureActive();
         try {
             PalettedImage updated = createPalettedImage(inputStream);
             replaceWith(updated);
@@ -66,10 +68,12 @@ public class PalettedImage extends Image {
     }
 
     public void changeData(byte[] data) {
+        ensureActive();
         replaceWith(createPalettedImage(data));
     }
 
     public void setPalette(Palette palette) {
+        ensureActive();
         if (palette == null) {
             throw new NullPointerException("palette");
         }
@@ -80,6 +84,7 @@ public class PalettedImage extends Image {
     }
 
     public Palette getPalette() {
+        ensureActive();
         if (palette == null) {
             throw new UIException(UIException.ILLEGAL_STATE);
         }
@@ -93,17 +98,21 @@ public class PalettedImage extends Image {
 
     @Override
     public final void setTransparentEnabled(boolean enabled) {
+        ensureActive();
         this.transparentEnabled = enabled;
+        this.appliedTransparentIndex = enabled ? getTransparentIndex() : -1;
     }
 
     public void setTransparentIndex(int index) {
-        if (palette != null && (index < 0 || index >= palette.getEntryCount())) {
+        ensureActive();
+        if (index < 0 || index >= 256) {
             throw new ArrayIndexOutOfBoundsException(index);
         }
         this.transparentIndex = index;
     }
 
     public int getTransparentIndex() {
+        ensureActive();
         return transparentIndex < 0 ? 0 : transparentIndex;
     }
 
@@ -121,15 +130,18 @@ public class PalettedImage extends Image {
     public void dispose() {
         pixels = null;
         palette = null;
+        appliedTransparentIndex = -1;
     }
 
     @Override
     public int getWidth() {
+        ensureActive();
         return width;
     }
 
     @Override
     public int getHeight() {
+        ensureActive();
         return height;
     }
 
@@ -143,7 +155,7 @@ public class PalettedImage extends Image {
             for (int x = 0; x < width; x++, pos++) {
                 int index = pixels[pos] & 0xFF;
                 int argb = palette.getEntry(index);
-                if (transparentEnabled && transparentIndex >= 0 && index == transparentIndex) {
+                if (transparentEnabled && appliedTransparentIndex >= 0 && index == appliedTransparentIndex) {
                     argb &= 0x00FFFFFF;
                 }
                 image.setRGB(x, y, argb);
@@ -158,6 +170,7 @@ public class PalettedImage extends Image {
         this.pixels = updated.pixels;
         this.palette = updated.palette;
         this.transparentIndex = updated.transparentIndex;
+        this.appliedTransparentIndex = updated.appliedTransparentIndex;
         this.transparentEnabled = updated.transparentEnabled;
     }
 
@@ -180,6 +193,7 @@ public class PalettedImage extends Image {
         result.pixels = pixels;
         result.palette = new Palette(colors);
         result.transparentIndex = colorModel.getTransparentPixel();
+        result.appliedTransparentIndex = -1;
         return result;
     }
 
@@ -214,5 +228,11 @@ public class PalettedImage extends Image {
         result.pixels = pixels;
         result.palette = new Palette(paletteColors);
         return result;
+    }
+
+    private void ensureActive() {
+        if (pixels == null || palette == null) {
+            throw new UIException(UIException.ILLEGAL_STATE, "PalettedImage is disposed");
+        }
     }
 }

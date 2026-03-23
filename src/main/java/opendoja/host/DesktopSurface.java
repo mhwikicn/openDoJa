@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class DesktopSurface {
+    private static final long INPUT_WOKEN_SYNC_UNLOCK_FLOOR_NANOS = (1_000_000_000L / 60L);
     private BufferedImage image;
     private int backgroundColor = 0xFF000000;
     private Consumer<BufferedImage> repaintHook;
@@ -14,6 +15,8 @@ public final class DesktopSurface {
     private boolean depthFrameActive;
     private long syncUnlockIntervalNanos;
     private long lastFlushNanos;
+    private volatile Thread syncUnlockWaitThread;
+    private volatile boolean syncUnlockWakeRequested;
 
     public DesktopSurface(int width, int height) {
         this.image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -60,10 +63,26 @@ public final class DesktopSurface {
         return repaintHook != null;
     }
 
+    public boolean immediatePresentationEnabled() {
+        return repaintHook != null && syncUnlockIntervalNanos > 0L;
+    }
+
     public void setSyncUnlockIntervalNanos(long syncUnlockIntervalNanos) {
         this.syncUnlockIntervalNanos = Math.max(0L, syncUnlockIntervalNanos);
         if (this.syncUnlockIntervalNanos == 0L) {
             this.lastFlushNanos = 0L;
+        }
+    }
+
+    long syncUnlockIntervalNanos() {
+        return syncUnlockIntervalNanos;
+    }
+
+    void wakeSyncUnlockWait() {
+        Thread waitThread = syncUnlockWaitThread;
+        if (waitThread != null) {
+            syncUnlockWakeRequested = true;
+            java.util.concurrent.locks.LockSupport.unpark(waitThread);
         }
     }
 
@@ -89,15 +108,45 @@ public final class DesktopSurface {
             long now = System.nanoTime();
             long elapsed = now - lastFlushNanos;
             if (lastFlushNanos != 0L && elapsed < syncUnlockIntervalNanos) {
-                long remainingNanos = syncUnlockIntervalNanos - elapsed;
-                try {
-                    java.util.concurrent.locks.LockSupport.parkNanos(remainingNanos);
-                } finally {
+                long normalTargetNanos = lastFlushNanos + syncUnlockIntervalNanos;
+                long expeditedTargetNanos = lastFlushNanos
+                        + java.lang.Math.min(syncUnlockIntervalNanos, INPUT_WOKEN_SYNC_UNLOCK_FLOOR_NANOS);
+                boolean expedited = false;
+                while (true) {
+                    long targetNanos = expedited ? expeditedTargetNanos : normalTargetNanos;
                     now = System.nanoTime();
+                    long remainingNanos = targetNanos - now;
+                    if (remainingNanos <= 0L) {
+                        break;
+                    }
+                    try {
+                        syncUnlockWaitThread = Thread.currentThread();
+                        java.util.concurrent.locks.LockSupport.parkNanos(remainingNanos);
+                    } finally {
+                        syncUnlockWaitThread = null;
+                    }
+                    if (syncUnlockWakeRequested) {
+                        syncUnlockWakeRequested = false;
+                        expedited = true;
+                    }
                 }
+                syncUnlockWakeRequested = false;
             }
             lastFlushNanos = now;
         }
+        present(presentedFrame);
+    }
+
+    public void presentImmediately(BufferedImage presentedFrame) {
+        // Immediate direct-canvas presentation is only a visual snapshot. It is not a
+        // definitive frame boundary, so keep the shared depth frame alive for any later 3D
+        // submissions that still belong to the same game frame.
+        if (repaintHook != null) {
+            repaintHook.accept(presentedFrame);
+        }
+    }
+
+    private void present(BufferedImage presentedFrame) {
         endDepthFrame();
         if (repaintHook != null) {
             repaintHook.accept(presentedFrame);

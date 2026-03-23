@@ -1,5 +1,13 @@
 package com.nttdocomo.opt.ui.j3d;
 
+/**
+ * An interface that provides 3D graphics.
+ * A {@code Graphics} class that supports 3D must implement this interface.
+ * Depending on the handset, this interface may not be supported; in that case
+ * an {@link UnsupportedOperationException} occurs when a method is called.
+ *
+ * <p>Introduced in DoJa-2.0.</p>
+ */
 public interface Graphics3D {
     int PRIMITIVE_POINTS = 1;
     int PRIMITIVE_LINES = 2;

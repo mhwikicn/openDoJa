@@ -5,6 +5,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+/**
+ * Defines an HTTP connection.
+ * This interface provides the DoJa-specific HTTP constants together with the
+ * request and response operations used by the DoJa connector layer.
+ */
 public interface HttpConnection extends ContentConnection {
     String HEAD = "HEAD";
     String GET = "GET";
@@ -58,6 +63,27 @@ public interface HttpConnection extends ContentConnection {
     InputStream openInputStream() throws IOException;
 
     OutputStream openOutputStream() throws IOException;
+
+    /**
+     * Gets the content encoding identifier string.
+     *
+     * @return the content encoding identifier string, or {@code null} if the corresponding header is absent
+     */
+    String getEncoding();
+
+    /**
+     * Gets the content length.
+     *
+     * @return the content length, or {@code -1} if the corresponding header is absent
+     */
+    long getLength();
+
+    /**
+     * Gets the content type identifier string.
+     *
+     * @return the content type identifier string, or {@code null} if the corresponding header is absent
+     */
+    String getType();
 
     String getURL();
 

@@ -7,6 +7,7 @@ public class Light extends Object3D {
     public static final int DIRECTIONAL = 129;
     public static final int OMNI = 130;
     public static final int SPOT = 131;
+    private static final int MAX_LIGHTS = 8;
 
     private Vector3D position = new Vector3D();
     private Vector3D vector = new Vector3D(0f, 0f, 1f);
@@ -66,7 +67,7 @@ public class Light extends Object3D {
     }
 
     public static int getMaxLights() {
-        return 8;
+        return MAX_LIGHTS;
     }
 
     int mode() {

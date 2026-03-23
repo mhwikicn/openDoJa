@@ -5,6 +5,7 @@ import opendoja.host.DesktopSurface;
 import opendoja.g3d.MascotFigure;
 import opendoja.g3d.Software3DContext;
 import opendoja.g3d.SoftwareTexture;
+import opendoja.host.DoJaApiUnimplemented;
 import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
 
@@ -56,6 +57,14 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private Font font = Font.getDefaultFont();
     private int flipMode = FLIP_NONE;
     private com.nttdocomo.opt.ui.j3d.AffineTrans[] optViewTransforms = new com.nttdocomo.opt.ui.j3d.AffineTrans[0];
+    private static volatile java.lang.reflect.Constructor<?> platformGraphicsConstructor;
+
+    /**
+     * Applications cannot create this object directly.
+     */
+    protected Graphics() {
+        this(new DesktopSurface(1, 1));
+    }
 
     protected Graphics(DesktopSurface surface) {
         this.surface = surface;
@@ -69,6 +78,21 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         clearClip();
     }
 
+    static Graphics createPlatformGraphics(DesktopSurface surface) {
+        try {
+            java.lang.reflect.Constructor<?> constructor = platformGraphicsConstructor;
+            if (constructor == null) {
+                Class<?> clazz = Class.forName("com.nttdocomo.opt.ui.Graphics2");
+                constructor = clazz.getDeclaredConstructor(DesktopSurface.class);
+                constructor.setAccessible(true);
+                platformGraphicsConstructor = constructor;
+            }
+            return (Graphics) constructor.newInstance(surface);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return new Graphics(surface);
+        }
+    }
+
     public void clearClip() {
         delegate.setClip(0, 0, surface.width(), surface.height());
     }
@@ -78,6 +102,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         delegate.setColor(new Color(surface.backgroundColor(), true));
         delegate.fillRect(originX + x, originY + y, width, height);
         delegate.setColor(old);
+        flushSurfacePresentation();
     }
 
     public void clipRect(int x, int y, int width, int height) {
@@ -85,7 +110,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     public Graphics copy() {
-        Graphics copy = new Graphics(surface);
+        Graphics copy = createPlatformGraphics(surface);
         copy.originX = originX;
         copy.originY = originY;
         copy.color = color;
@@ -100,9 +125,62 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         return copy;
     }
 
+    /**
+     * Returns the current origin X coordinate.
+     */
+    protected final int getOriginX() {
+        return originX;
+    }
+
+    /**
+     * Returns the current origin Y coordinate.
+     */
+    protected final int getOriginY() {
+        return originY;
+    }
+
+    /**
+     * Captures an image from the current drawing surface.
+     *
+     * @param x the left edge of the region
+     * @param y the top edge of the region
+     * @param width the region width
+     * @param height the region height
+     * @return a new image containing the requested region
+     */
+    protected final Image getImageRegion(int x, int y, int width, int height) {
+        if (width <= 0 || height <= 0) {
+            return Image.createImage(1, 1);
+        }
+        int srcX = Math.max(0, originX + x);
+        int srcY = Math.max(0, originY + y);
+        int srcWidth = Math.max(0, java.lang.Math.min(width, surface.width() - srcX));
+        int srcHeight = Math.max(0, java.lang.Math.min(height, surface.height() - srcY));
+        BufferedImage copy = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        if (srcWidth > 0 && srcHeight > 0) {
+            Graphics2D g2 = copy.createGraphics();
+            try {
+                g2.drawImage(surface.image(),
+                        0,
+                        0,
+                        srcWidth,
+                        srcHeight,
+                        srcX,
+                        srcY,
+                        srcX + srcWidth,
+                        srcY + srcHeight,
+                        null);
+            } finally {
+                g2.dispose();
+            }
+        }
+        return new DesktopImage(copy);
+    }
+
     public void copyArea(int x, int y, int width, int height, int dx, int dy) {
         BufferedImage source = surface.image().getSubimage(originX + x, originY + y, width, height);
         delegate.drawImage(source, originX + dx, originY + dy, null);
+        flushSurfacePresentation();
     }
 
     public void dispose() {
@@ -144,6 +222,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     public void drawLine(int x1, int y1, int x2, int y2) {
         delegate.drawLine(originX + x1, originY + y1, originX + x2, originY + y2);
+        flushSurfacePresentation();
     }
 
     public void drawPolyline(int[] xs, int[] ys, int n) {
@@ -161,10 +240,12 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             drawY[i] = originY + ys[i];
         }
         delegate.drawPolyline(drawX, drawY, n);
+        flushSurfacePresentation();
     }
 
     public void drawRect(int x, int y, int width, int height) {
         delegate.drawRect(originX + x, originY + y, width, height);
+        flushSurfacePresentation();
     }
 
     public void drawString(String text, int x, int y) {
@@ -172,6 +253,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             return;
         }
         font.drawString(delegate, text, originX + x, originY + y, color);
+        flushSurfacePresentation();
     }
 
     public void fillPolygon(int[] xs, int[] ys, int n) {
@@ -189,10 +271,12 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             drawY[i] = originY + ys[i];
         }
         delegate.fillPolygon(drawX, drawY, n);
+        flushSurfacePresentation();
     }
 
     public void fillRect(int x, int y, int width, int height) {
         delegate.fillRect(originX + x, originY + y, width, height);
+        flushSurfacePresentation();
     }
 
     public static int getColorOfName(int name) {
@@ -255,6 +339,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     public void setPictoColorEnabled(boolean enabled) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.setPictoColorEnabled(boolean)",
+                "Picto-color toggling has no separate desktop host implementation"
+        );
     }
 
     public void unlock(boolean flush) {
@@ -304,10 +392,12 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     public void drawArc(int x, int y, int width, int height, int startAngle, int arcAngle) {
         delegate.drawArc(originX + x, originY + y, width, height, startAngle, arcAngle);
+        flushSurfacePresentation();
     }
 
     public void fillArc(int x, int y, int width, int height, int startAngle, int arcAngle) {
         delegate.fillArc(originX + x, originY + y, width, height, startAngle, arcAngle);
+        flushSurfacePresentation();
     }
 
     public int getPixel(int x, int y) {
@@ -338,6 +428,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     public void setRGBPixel(int x, int y, int color) {
         surface.image().setRGB(originX + x, originY + y, color);
+        flushSurfacePresentation();
     }
 
     public void setPixels(int x, int y, int width, int height, int[] pixels, int offset) {
@@ -346,6 +437,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     public void setRGBPixels(int x, int y, int width, int height, int[] pixels, int offset) {
         surface.image().setRGB(originX + x, originY + y, width, height, pixels, offset, width);
+        flushSurfacePresentation();
     }
 
     public void drawImage(Image image, int[] points, int sx, int sy, int width, int height) {
@@ -403,6 +495,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         } finally {
             delegate.setTransform(oldTransform);
         }
+        flushSurfacePresentation();
     }
 
     private BufferedImage copyImage(BufferedImage image) {
@@ -417,8 +510,23 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void flushSurfacePresentation() {
+        if (!surface.immediatePresentationEnabled()) {
+            return;
+        }
         DoJaRuntime runtime = DoJaRuntime.current();
         if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
+            return;
+        }
+        surface.presentImmediately(copyImage(surface.image()));
+    }
+
+    private void flushSurfaceFrame() {
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
+            // opt.ui.j3d titles can issue multiple flushes inside one locked Canvas frame to
+            // separate 3D passes. Do not present mid-frame, but do end the shared z-frame so a
+            // later orthographic/translucent pass does not depth-test against the earlier scene.
+            surface.endDepthFrame();
             return;
         }
         surface.flush(copyImage(surface.image()));
@@ -511,7 +619,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void flushBuffer() {
         try {
-            flushSurfacePresentation();
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, "3D call flushBuffer");
+            }
+            flushSurfaceFrame();
         } catch (RuntimeException e) {
             throw traceFailure("flushBuffer", e);
         }
@@ -549,6 +660,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void setFog(com.nttdocomo.ui.graphics3d.Fog fog) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.setFog(com.nttdocomo.ui.graphics3d.Fog)",
+                "UI fog state is not yet wired into the desktop 3D renderer"
+        );
     }
 
     @Override
@@ -588,7 +703,11 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setViewTrans(com.nttdocomo.opt.ui.j3d.AffineTrans transform) {
         try {
-            threeD.setOptViewTransform(transform == null ? Software3DContext.identity() : invokeHidden(transform, "toFloatMatrix", float[].class));
+            float[] matrix = transform == null ? Software3DContext.identity() : invokeHidden(transform, "toFloatMatrix", float[].class);
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setViewTrans matrix=" + Arrays.toString(matrix));
+            }
+            threeD.setOptViewTransform(matrix);
         } catch (RuntimeException e) {
             throw traceFailure("setViewTrans", e);
         }
@@ -607,6 +726,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenCenter(int x, int y) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenCenter x=" + x + " y=" + y);
+            }
             threeD.setOptScreenCenter(originX + x, originY + y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenCenter", e);
@@ -616,6 +738,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenScale(int x, int y) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenScale x=" + x + " y=" + y);
+            }
             threeD.setOptScreenScale(x, y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenScale", e);
@@ -625,6 +750,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenView(int x, int y) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenView width=" + x + " height=" + y);
+            }
             // DoJa opt `setScreenView()` configures the parallel-projection extent, not a screen-space position.
             threeD.setOptScreenView(x, y);
         } catch (RuntimeException e) {
@@ -635,6 +763,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspective(int near, int far, int width) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspective near=" + near + " far=" + far + " width=" + width);
+            }
             threeD.setOptPerspective(near, far, width);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspective(int,int,int)", e);
@@ -644,6 +775,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspective(int near, int far, int width, int height) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspectiveWH near=" + near + " far=" + far + " width=" + width + " height=" + height);
+            }
             threeD.setOptPerspective(near, far, width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspective(int,int,int,int)", e);
@@ -676,7 +810,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void flush() {
         try {
-            flushSurfacePresentation();
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, "3D call flush");
+            }
+            flushSurfaceFrame();
         } catch (RuntimeException e) {
             throw traceFailure("flush", e);
         }
@@ -684,10 +821,18 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void enableSphereMap(boolean enabled) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.enableSphereMap(boolean)",
+                "Sphere mapping is not yet implemented for the opt 3D renderer"
+        );
     }
 
     @Override
     public void setSphereTexture(com.nttdocomo.opt.ui.j3d.Texture texture) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.setSphereTexture(com.nttdocomo.opt.ui.j3d.Texture)",
+                "Sphere-map textures are not yet implemented for the opt 3D renderer"
+        );
     }
 
     @Override
@@ -723,6 +868,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setClipRect3D(int x, int y, int width, int height) {
         try {
+            if (TRACE_3D_CALLS) {
+                OpenDoJaLog.debug(Graphics.class, () -> "3D call setClipRect3D x=" + x + " y=" + y + " width=" + width + " height=" + height);
+            }
             // `setClipRect3D()` is defined in absolute canvas coordinates and ignores Graphics.setOrigin().
             threeD.setOptClip(x, y, width, height);
         } catch (RuntimeException e) {
@@ -739,10 +887,18 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     @Override
     public void enableToonShader(boolean enabled) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.enableToonShader(boolean)",
+                "Toon shading is not yet implemented for the opt 3D renderer"
+        );
     }
 
     @Override
     public void setToonParam(int highlight, int mid, int shadow) {
+        DoJaApiUnimplemented.noOp(
+                "com.nttdocomo.ui.Graphics.setToonParam(int, int, int)",
+                "Toon shader parameters are not yet implemented for the opt 3D renderer"
+        );
     }
 
     @Override

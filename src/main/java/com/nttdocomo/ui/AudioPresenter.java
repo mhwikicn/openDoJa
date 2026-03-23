@@ -7,10 +7,16 @@ import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
 
 import javax.sound.midi.MidiSystem;
+import javax.sound.midi.Sequence;
 import javax.sound.midi.Sequencer;
+import javax.sound.midi.ShortMessage;
 import java.io.ByteArrayInputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class AudioPresenter implements MediaPresenter, AutoCloseable {
     private static final boolean TRACE_AUDIO_FAILURES = Boolean.getBoolean("opendoja.traceAudioFailures");
@@ -34,14 +40,24 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
     public static final int MAX_PRIORITY = 10;
     public static final int MIN_OPTION_ATTR = 128;
     public static final int MAX_OPTION_ATTR = 255;
+    protected static final int MIN_VENDOR_ATTR = 64;
+    protected static final int MAX_VENDOR_ATTR = 127;
+    protected static final int MIN_VENDOR_AUDIO_EVENT = 64;
+    protected static final int MAX_VENDOR_AUDIO_EVENT = 127;
+    private static final int SYNC_EVENT_PRECISION_MS = 100;
 
     private final Map<Integer, Integer> attributes = new HashMap<>();
+    private final List<ScheduledFuture<?>> syncEventTasks = new ArrayList<>();
+    private final Audio3D audio3D = new Audio3D(this);
     private MediaResource resource;
     private MediaListener mediaListener;
     private SampledPcmPlayer sampledPlayer;
     private MldPcmPlayer mldPlayer;
     private Sequencer sequencer;
     private int pausedPosition;
+    private int syncEventChannel = -1;
+    private int syncEventKey = -1;
+    private volatile boolean playing;
 
     protected AudioPresenter() {
         registerWithRuntime();
@@ -51,8 +67,13 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         mldPlayer = new MldPcmPlayer(new MldListener());
     }
 
+    /**
+     * Gets the 3D audio controller associated with this presenter.
+     *
+     * @return the 3D audio controller for this presenter
+     */
     public Audio3D getAudio3D() {
-        return new Audio3D();
+        return audio3D;
     }
 
     public static AudioPresenter getAudioPresenter() {
@@ -63,6 +84,11 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         return new AudioPresenter();
     }
 
+    /**
+     * Gets an audio-track presenter object.
+     *
+     * @return the audio-track presenter object
+     */
     public static AudioTrackPresenter getAudioTrackPresenter() {
         return new AudioTrackPresenter();
     }
@@ -90,6 +116,7 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         registerWithRuntime();
         stopPlayback();
         if (!(resource instanceof MediaManager.BasicMediaSound sound)) {
+            playing = false;
             notifyListener(AUDIO_STOPPED, 0);
             return;
         }
@@ -118,8 +145,11 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
                 sampledPlayer.setVolumeLevel(currentVolumeLevel());
                 sampledPlayer.start(prepared, loopCount);
             }
+            playing = true;
             notifyListener(AUDIO_PLAYING, 0);
+            scheduleSyncEvents(prepared);
         } catch (Exception e) {
+            playing = false;
             if (TRACE_AUDIO_FAILURES) {
                 OpenDoJaLog.error(AudioPresenter.class, "Audio playback failed", e);
             }
@@ -130,13 +160,19 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
     public void pause() {
         if (sampledPlayer != null) {
             sampledPlayer.pause();
+            playing = false;
+            cancelSyncEvents();
             notifyListener(AUDIO_PAUSED, 0);
         } else if (mldPlayer != null) {
             mldPlayer.pause();
+            playing = false;
+            cancelSyncEvents();
             notifyListener(AUDIO_PAUSED, 0);
         } else if (sequencer != null) {
             pausedPosition = (int) sequencer.getTickPosition();
             sequencer.stop();
+            playing = false;
+            cancelSyncEvents();
             notifyListener(AUDIO_PAUSED, 0);
         }
     }
@@ -144,13 +180,17 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
     public void restart() {
         if (sampledPlayer != null) {
             sampledPlayer.restart();
+            playing = true;
             notifyListener(AUDIO_RESTARTED, 0);
         } else if (mldPlayer != null) {
             mldPlayer.restart();
+            playing = true;
             notifyListener(AUDIO_RESTARTED, 0);
         } else if (sequencer != null) {
             sequencer.setTickPosition(pausedPosition);
             sequencer.start();
+            playing = true;
+            scheduleSyncEventsForSequence(sequencer.getSequence(), getCurrentTime());
             notifyListener(AUDIO_RESTARTED, 0);
         }
     }
@@ -181,7 +221,18 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         return 0;
     }
 
-    public void setSyncEvent(int type, int time) {
+    public void setSyncEvent(int channel, int key) {
+        if (playing) {
+            return;
+        }
+        if (channel < 0 || channel > 15) {
+            return;
+        }
+        if (key < 0 || key > 127) {
+            return;
+        }
+        syncEventChannel = channel;
+        syncEventKey = key;
     }
 
     @Override
@@ -194,6 +245,8 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
     }
 
     private void stopPlayback() {
+        playing = false;
+        cancelSyncEvents();
         if (sampledPlayer != null) {
             sampledPlayer.stop();
         }
@@ -270,6 +323,72 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         return DoJaProfile.current().isAtLeast(2, 0);
     }
 
+    final boolean isPlaying() {
+        return playing;
+    }
+
+    private void scheduleSyncEvents(MediaManager.PreparedSound prepared) {
+        if (attributes.getOrDefault(SYNC_MODE, ATTR_SYNC_OFF) != ATTR_SYNC_ON) {
+            return;
+        }
+        if (syncEventChannel < 0 || syncEventKey < 0) {
+            return;
+        }
+        if (prepared.kind() != MediaManager.PreparedSound.Kind.MIDI || sequencer == null) {
+            return;
+        }
+        scheduleSyncEventsForSequence(sequencer.getSequence(), 0);
+    }
+
+    private void scheduleSyncEventsForSequence(Sequence sequence, int offsetMillis) {
+        cancelSyncEvents();
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime == null || sequence == null) {
+            return;
+        }
+        long tickLength = sequence.getTickLength();
+        long microsecondLength = sequence.getMicrosecondLength();
+        if (tickLength <= 0 || microsecondLength <= 0) {
+            return;
+        }
+        long lastScheduled = Long.MIN_VALUE;
+        for (javax.sound.midi.Track track : sequence.getTracks()) {
+            for (int i = 0; i < track.size(); i++) {
+                javax.sound.midi.MidiEvent event = track.get(i);
+                if (!(event.getMessage() instanceof ShortMessage shortMessage)) {
+                    continue;
+                }
+                if (shortMessage.getCommand() != ShortMessage.NOTE_ON || shortMessage.getData2() <= 0) {
+                    continue;
+                }
+                if (shortMessage.getChannel() != syncEventChannel || shortMessage.getData1() != syncEventKey) {
+                    continue;
+                }
+                long millis = Math.round((double) event.getTick() * microsecondLength / tickLength / 1_000.0d);
+                if (millis < offsetMillis) {
+                    continue;
+                }
+                if (lastScheduled != Long.MIN_VALUE && millis - lastScheduled < SYNC_EVENT_PRECISION_MS) {
+                    continue;
+                }
+                long delay = Math.max(0L, millis - offsetMillis);
+                syncEventTasks.add(runtime.scheduler().schedule(
+                        () -> notifyListener(AUDIO_SYNC, 0),
+                        delay,
+                        TimeUnit.MILLISECONDS
+                ));
+                lastScheduled = millis;
+            }
+        }
+    }
+
+    private void cancelSyncEvents() {
+        for (ScheduledFuture<?> future : syncEventTasks) {
+            future.cancel(false);
+        }
+        syncEventTasks.clear();
+    }
+
     private final class MldListener implements MldPcmPlayer.Listener {
         @Override
         public void onLoop() {
@@ -278,11 +397,15 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
 
         @Override
         public void onComplete() {
+            playing = false;
+            cancelSyncEvents();
             notifyListener(AUDIO_COMPLETE, 0);
         }
 
         @Override
         public void onFailure(Exception exception) {
+            playing = false;
+            cancelSyncEvents();
             if (TRACE_AUDIO_FAILURES) {
                 OpenDoJaLog.error(AudioPresenter.class, "MLD playback failed", exception);
             }
@@ -298,11 +421,15 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
 
         @Override
         public void onComplete() {
+            playing = false;
+            cancelSyncEvents();
             notifyListener(AUDIO_COMPLETE, 0);
         }
 
         @Override
         public void onFailure(Exception exception) {
+            playing = false;
+            cancelSyncEvents();
             if (TRACE_AUDIO_FAILURES) {
                 OpenDoJaLog.error(AudioPresenter.class, "Sampled playback failed", exception);
             }

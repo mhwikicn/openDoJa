@@ -2,29 +2,88 @@ package com.nttdocomo.opt.ui.j3d;
 
 import opendoja.g3d.FixedPoint;
 
+/**
+ * Defines a class that handles matrices for three-dimensional affine
+ * transforms.
+ * By setting an instance of this class with
+ * {@link Graphics3D#setViewTrans(AffineTrans)}, object rotation and view
+ * transform initialization can be performed.
+ *
+ * <p>This class does not explicitly define methods for translation or scaling.
+ * As alternatives, the screen-transform methods
+ * {@link Graphics3D#setScreenCenter(int, int)} and
+ * {@link Graphics3D#setScreenScale(int, int)} are intended to be used.</p>
+ *
+ * <p>Each matrix element is a 32-bit signed fixed-point number that maps
+ * {@code 1.0} to {@code 4096}. If a value overflows the {@code int} range
+ * during calculation, the result is device-dependent.</p>
+ *
+ * <p>Introduced in DoJa-2.0.</p>
+ */
 public class AffineTrans {
+    /** The element in row 1, column 1. */
     public int m00 = FixedPoint.ONE;
+    /** The element in row 1, column 2. */
     public int m01;
+    /** The element in row 1, column 3. */
     public int m02;
+    /** The element in row 1, column 4. */
     public int m03;
+    /** The element in row 2, column 1. */
     public int m10;
+    /** The element in row 2, column 2. */
     public int m11 = FixedPoint.ONE;
+    /** The element in row 2, column 3. */
     public int m12;
+    /** The element in row 2, column 4. */
     public int m13;
+    /** The element in row 3, column 1. */
     public int m20;
+    /** The element in row 3, column 2. */
     public int m21;
+    /** The element in row 3, column 3. */
     public int m22 = FixedPoint.ONE;
+    /** The element in row 3, column 4. */
     public int m23;
 
+    /**
+     * Creates an identity matrix.
+     */
     public AffineTrans() {
     }
 
+    /**
+     * Creates a matrix with the specified elements.
+     *
+     * @param m00 the element in row 1, column 1
+     * @param m01 the element in row 1, column 2
+     * @param m02 the element in row 1, column 3
+     * @param m03 the element in row 1, column 4
+     * @param m10 the element in row 2, column 1
+     * @param m11 the element in row 2, column 2
+     * @param m12 the element in row 2, column 3
+     * @param m13 the element in row 2, column 4
+     * @param m20 the element in row 3, column 1
+     * @param m21 the element in row 3, column 2
+     * @param m22 the element in row 3, column 3
+     * @param m23 the element in row 3, column 4
+     */
     public AffineTrans(int m00, int m01, int m02, int m03,
                        int m10, int m11, int m12, int m13,
                        int m20, int m21, int m22, int m23) {
         setElement(m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23);
     }
 
+    /**
+     * Sets the specified element of this matrix.
+     *
+     * @param row the zero-based row number of the element to set
+     * @param column the zero-based column number of the element to set
+     * @param value the value to set at row {@code row + 1}, column
+     *              {@code column + 1}
+     * @throws ArrayIndexOutOfBoundsException if {@code row} or
+     *         {@code column} is out of range
+     */
     public void setElement(int row, int column, int value) {
         switch (row * 4 + column) {
             case 0 -> m00 = value;
@@ -43,6 +102,22 @@ public class AffineTrans {
         }
     }
 
+    /**
+     * Sets all elements of this matrix.
+     *
+     * @param m00 the element in row 1, column 1
+     * @param m01 the element in row 1, column 2
+     * @param m02 the element in row 1, column 3
+     * @param m03 the element in row 1, column 4
+     * @param m10 the element in row 2, column 1
+     * @param m11 the element in row 2, column 2
+     * @param m12 the element in row 2, column 3
+     * @param m13 the element in row 2, column 4
+     * @param m20 the element in row 3, column 1
+     * @param m21 the element in row 3, column 2
+     * @param m22 the element in row 3, column 3
+     * @param m23 the element in row 3, column 4
+     */
     public void setElement(int m00, int m01, int m02, int m03,
                            int m10, int m11, int m12, int m13,
                            int m20, int m21, int m22, int m23) {
@@ -60,6 +135,17 @@ public class AffineTrans {
         this.m23 = m23;
     }
 
+    /**
+     * Sets the elements of the specified row in this matrix.
+     *
+     * @param row the zero-based row number whose elements are to be set
+     * @param a the value for column 1 of the specified row
+     * @param b the value for column 2 of the specified row
+     * @param c the value for column 3 of the specified row
+     * @param d the value for column 4 of the specified row
+     * @throws ArrayIndexOutOfBoundsException if {@code row} is outside
+     *         {@code 0} through {@code 2}
+     */
     public void setRow(int row, int a, int b, int c, int d) {
         switch (row) {
             case 0 -> setElement(a, b, c, d, m10, m11, m12, m13, m20, m21, m22, m23);
@@ -69,6 +155,16 @@ public class AffineTrans {
         }
     }
 
+    /**
+     * Sets the elements of the specified column in this matrix.
+     *
+     * @param column the zero-based column number whose elements are to be set
+     * @param a the value for row 1 of the specified column
+     * @param b the value for row 2 of the specified column
+     * @param c the value for row 3 of the specified column
+     * @throws ArrayIndexOutOfBoundsException if {@code column} is outside
+     *         {@code 0} through {@code 3}
+     */
     public void setColumn(int column, int a, int b, int c) {
         switch (column) {
             case 0 -> {
@@ -95,6 +191,12 @@ public class AffineTrans {
         }
     }
 
+    /**
+     * Sets the matrix elements so that the transform becomes the identity
+     * transform.
+     * This is the same as calling
+     * {@code setElement(4096, 0, 0, 0, 0, 4096, 0, 0, 0, 0, 4096, 0)}.
+     */
     public void setIdentity() {
         m00 = FixedPoint.ONE;
         m01 = 0;
@@ -110,10 +212,29 @@ public class AffineTrans {
         m23 = 0;
     }
 
+    /**
+     * Calculates the product of the transform matrices
+     * {@code (this x other)} and stores the result in this object.
+     * This is the same as calling {@link #mul(AffineTrans, AffineTrans)} with
+     * this object and {@code other}. The calculation is correct even when this
+     * and {@code other} refer to the same object.
+     *
+     * @param other the multiplier matrix
+     * @throws NullPointerException if {@code other} is {@code null}
+     */
     public void mul(AffineTrans other) {
         mul(this, other);
     }
 
+    /**
+     * Calculates the product of the transform matrices
+     * {@code (left x right)} and stores the result in this object.
+     *
+     * @param left the multiplicand matrix
+     * @param right the multiplier matrix
+     * @throws NullPointerException if {@code left} or {@code right} is
+     *         {@code null}
+     */
     public void mul(AffineTrans left, AffineTrans right) {
         if (left == null || right == null) {
             throw new NullPointerException();
@@ -133,24 +254,55 @@ public class AffineTrans {
         setElement(rm00, rm01, rm02, rm03, rm10, rm11, rm12, rm13, rm20, rm21, rm22, rm23);
     }
 
+    /**
+     * Sets the matrix elements so that this matrix represents rotation around
+     * the x-axis in a right-handed coordinate system.
+     * The fourth column is not changed.
+     *
+     * @param angle the angle in 4096-per-circle units
+     */
     public void setRotateX(int angle) {
         int cos = Math.cos(angle);
         int sin = Math.sin(angle);
         setElement(FixedPoint.ONE, 0, 0, 0, 0, cos, -sin, 0, 0, sin, cos, 0);
     }
 
+    /**
+     * Sets the matrix elements so that this matrix represents rotation around
+     * the y-axis in a right-handed coordinate system.
+     * The fourth column is not changed.
+     *
+     * @param angle the angle in 4096-per-circle units
+     */
     public void setRotateY(int angle) {
         int cos = Math.cos(angle);
         int sin = Math.sin(angle);
         setElement(cos, 0, sin, 0, 0, FixedPoint.ONE, 0, 0, -sin, 0, cos, 0);
     }
 
+    /**
+     * Sets the matrix elements so that this matrix represents rotation around
+     * the z-axis in a right-handed coordinate system.
+     * The fourth column is not changed.
+     *
+     * @param angle the angle in 4096-per-circle units
+     */
     public void setRotateZ(int angle) {
         int cos = Math.cos(angle);
         int sin = Math.sin(angle);
         setElement(cos, -sin, 0, 0, sin, cos, 0, 0, 0, 0, FixedPoint.ONE, 0);
     }
 
+    /**
+     * Sets the matrix elements so that this matrix represents rotation around
+     * the specified vector in a right-handed coordinate system.
+     * The vector does not need to be a unit vector. The fourth column is not
+     * changed.
+     *
+     * @param vector the vector that becomes the axis of rotation
+     * @param angle the angle in 4096-per-circle units
+     * @throws NullPointerException if {@code vector} is {@code null}
+     */
     public void setRotateV(Vector3D vector, int angle) {
         if (vector == null) {
             throw new NullPointerException();
@@ -170,6 +322,15 @@ public class AffineTrans {
         );
     }
 
+    /**
+     * Sets the matrix elements so that this matrix represents conversion to
+     * view coordinates.
+     *
+     * @param eye the position vector of the viewpoint
+     * @param center the position vector of the reference point
+     * @param up the up vector
+     * @throws NullPointerException if an argument is {@code null}
+     */
     public void lookAt(Vector3D eye, Vector3D center, Vector3D up) {
         if (eye == null || center == null || up == null) {
             throw new NullPointerException();
@@ -191,6 +352,17 @@ public class AffineTrans {
         );
     }
 
+    /**
+     * Transforms the vector that represents point coordinates by this matrix
+     * and stores the result into another vector.
+     * The calculation is correct even when {@code source} and
+     * {@code destination} refer to the same object.
+     *
+     * @param source the vector that represents point coordinates
+     * @param destination the vector into which the transformed result is stored
+     * @throws NullPointerException if {@code source} or {@code destination} is
+     *         {@code null}
+     */
     public void transform(Vector3D source, Vector3D destination) {
         if (source == null || destination == null) {
             throw new NullPointerException();
