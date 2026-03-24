@@ -32,9 +32,6 @@
 // ---------------------------------------------------------------------------
 
 package opendoja.audio.mld.ma3;
-
-
-import opendoja.audio.mld.support.ExtraMath;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -42,7 +39,6 @@ import java.util.Arrays;
  * Sampler instance
  */
 public class SineSampler
-	extends AbstractSampler
 	implements Sampler
 {
 	/**
@@ -182,7 +178,7 @@ public class SineSampler
 		}
 		
 		// Configure fields
-		note.freqBase = (float)(440 * ExtraMath.pow(2, key / 12.0));
+		note.freqBase = (float)(440 * Math.pow(2, key / 12.0));
 		note.playing = true;
 		note.volBase = velocity;
 	}
@@ -195,7 +191,7 @@ public class SineSampler
 	{
 		if (Float.isInfinite(semitones))
 			throw new IllegalArgumentException("Invalid semitones.");
-		this.masterTune = (float)ExtraMath.pow(2, semitones);
+		this.masterTune = (float)Math.pow(2, semitones);
 	}
 	
 	/**
@@ -243,7 +239,7 @@ public class SineSampler
 		
 		SineChannel chan = channels[channel];
 		chan.bendBase = semitones;
-		chan.bendOut = (float)ExtraMath.pow(2,
+		chan.bendOut = (float)Math.pow(2,
 			chan.bendBase * chan.bendRange);
 	}
 	
@@ -262,7 +258,7 @@ public class SineSampler
 		
 		SineChannel chan = channels[channel];
 		chan.bendRange = range;
-		chan.bendOut = (float)ExtraMath.pow(2,
+		chan.bendOut = (float)Math.pow(2,
 			chan.bendBase * chan.bendRange);
 	}
 	

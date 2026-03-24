@@ -33,8 +33,6 @@
 
 package opendoja.audio.mld.ma3;
 
-import opendoja.audio.mld.support.AudioStreamRenderer;
-
 
 /**
  * Sample-generating instance of a {@code Sampler}. Configurations on the

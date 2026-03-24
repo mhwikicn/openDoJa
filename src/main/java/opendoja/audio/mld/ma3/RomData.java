@@ -9,8 +9,7 @@
 
 package opendoja.audio.mld.ma3;
 
-
-import opendoja.audio.mld.support.StreamUtils;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -87,7 +86,7 @@ public enum RomData
 	{
 		try
 		{
-			return this.decode(StreamUtils.readAll(this.input(__id)));
+			return this.decode(readAll(this.input(__id)));
 		}
 		catch (IOException __e)
 		{
@@ -131,5 +130,19 @@ public enum RomData
 			throw new RuntimeException("Invalid MA3 ROM wrapper.");
 		String payload = text.substring(start + 1, end).replace("\n", "");
 		return Base64.getMimeDecoder().decode(payload);
+	}
+
+	private static byte[] readAll(InputStream input)
+		throws IOException
+	{
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		byte[] buffer = new byte[8192];
+		int read;
+		while ((read = input.read(buffer)) >= 0)
+		{
+			if (read > 0)
+				output.write(buffer, 0, read);
+		}
+		return output.toByteArray();
 	}
 }

@@ -33,8 +33,6 @@
 
 package opendoja.audio.mld.ma3;
 
-import opendoja.audio.mld.support.ObjectShelf;
-
 
 /**
  * Utility class for reading binary data
@@ -80,7 +78,7 @@ class MLDBinaryReader
 		if (this.offset + length > this.start + this.length)
 			throw new RuntimeException("Unexpected EOF.");
 		byte[] ret = new byte[length];
-		ObjectShelf.arrayCopy(this.data, this.offset, ret, 0, length);
+		System.arraycopy(this.data, this.offset, ret, 0, length);
 		this.offset += length;
 		return ret;
 	}

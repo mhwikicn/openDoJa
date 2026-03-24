@@ -33,9 +33,6 @@
 
 package opendoja.audio.mld.ma3;
 
-
-import opendoja.audio.mld.support.Debugging;
-
 /**
  * Individual FM algorithm operator
  */
@@ -372,7 +369,7 @@ class MA3Operator
 		// should never occur
 		MA3Note note = this.note;
 		if (note == null)
-			throw Debugging.oops();
+			throw unexpectedState();
 		
 		this.envRof =
 			(note.block << 1 | note.f_number >> 8 + 
@@ -409,7 +406,7 @@ class MA3Operator
 		MA3Sampler instance = this.instance;
 		MA3Note note = this.note;
 		if (algorithm == null || instance == null || note == null)
-			throw Debugging.oops();
+			throw unexpectedState();
 		
 		// FM sample
 		if (!algorithm.isWave)
@@ -543,6 +540,11 @@ class MA3Operator
 		}
 		
 		return this.fb0;
+	}
+
+	private static RuntimeException unexpectedState()
+	{
+		return new IllegalStateException("Unexpected MA3 state");
 	}
 	
 }

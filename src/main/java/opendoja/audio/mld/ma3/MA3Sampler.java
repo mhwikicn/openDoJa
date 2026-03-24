@@ -8,9 +8,6 @@
 // ---------------------------------------------------------------------------
 
 package opendoja.audio.mld.ma3;
-
-
-import opendoja.audio.mld.support.ExtraMath;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,7 +18,6 @@ import java.util.Map;
  * @since 2025/05/02
  */
 public class MA3Sampler
-	extends AbstractSampler
 	implements Sampler
 {
 	private final MA3SamplerProvider ma3;
@@ -217,7 +213,7 @@ public class MA3Sampler
 		if (!chan.isDrum)
 		{
 			algorithm = this.getFMInstrument(chan.prgBank, chan.prgProgram);
-			freqBase = (float)(440 * ExtraMath.pow(2, key / 12.0));
+			freqBase = (float)(440 * Math.pow(2, key / 12.0));
 		}
 		
 		// Drum algorithm
@@ -276,7 +272,7 @@ public class MA3Sampler
 		if (Float.isInfinite(semitones))
 			throw new IllegalArgumentException("Invalid semitones.");
 		
-		this.bendOut = (float)ExtraMath.pow(2, semitones);
+		this.bendOut = (float)Math.pow(2, semitones);
 		for (MA3Channel chan : this.channels)
 			chan.onFrequency();
 	}
@@ -328,7 +324,7 @@ public class MA3Sampler
 		
 		MA3Channel chan = channels[channel];
 		chan.bendBase = semitones;
-		chan.bendOut = (float)ExtraMath.pow(2,
+		chan.bendOut = (float)Math.pow(2,
 			chan.bendBase * chan.bendRange);
 		chan.onFrequency();
 	}
@@ -348,7 +344,7 @@ public class MA3Sampler
 		
 		MA3Channel chan = channels[channel];
 		chan.bendRange = range;
-		chan.bendOut = (float)ExtraMath.pow(2,
+		chan.bendOut = (float)Math.pow(2,
 			chan.bendBase * chan.bendRange);
 		chan.onFrequency();
 	}

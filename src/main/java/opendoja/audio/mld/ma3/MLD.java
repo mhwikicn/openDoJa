@@ -32,9 +32,6 @@
 // ---------------------------------------------------------------------------
 
 package opendoja.audio.mld.ma3;
-
-
-import opendoja.audio.mld.support.ExtraMath;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -1105,7 +1102,7 @@ public class MLD
 	/** Convert a volume parameter to a linear amplitude. */
 	float volumeToAmplitude(float param)
 	{
-		return param == 0.0f ? 0.0f : (float)ExtraMath.pow(2,
+		return param == 0.0f ? 0.0f : (float)Math.pow(2,
 			(1 - param) * -96 / 20);
 	}
 }
