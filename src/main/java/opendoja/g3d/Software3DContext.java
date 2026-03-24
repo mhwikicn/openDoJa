@@ -198,9 +198,10 @@ public final class Software3DContext {
             return;
         }
         Projection projection = optPerspectiveEnabled ? createOptProjection(surfaceWidth, surfaceHeight) : null;
+        boolean invertScreenY = resolveOptFigureScreenYFlip(optViewTransform);
         renderModel(g, target, originX, originY, surfaceWidth, surfaceHeight, figure, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
-                optSemiTransparent, true, 0, 1f, optLightingEnabled ? 0.9f : 1f, 1f);
+                optSemiTransparent, invertScreenY, 0, 1f, optLightingEnabled ? 0.9f : 1f, 1f);
     }
 
     public void renderOptPrimitives(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
@@ -1189,6 +1190,16 @@ public final class Software3DContext {
                 matrix[4] * x + matrix[5] * y + matrix[6] * z + matrix[7],
                 matrix[8] * x + matrix[9] * y + matrix[10] * z + matrix[11]
         };
+    }
+
+    private static boolean resolveOptFigureScreenYFlip(float[] matrix) {
+        if (matrix == null || matrix.length < 6) {
+            return true;
+        }
+        // Opt figure callers can legally submit a view basis whose Y axis is already reflected
+        // relative to the primitive/lookAt path. In that case subtracting screen Y again flips
+        // the model upside down, so follow the submitted Y basis sign instead of hard-wiring it.
+        return matrix[5] >= 0f;
     }
 
     private static int clamp(int value, int min, int max) {
