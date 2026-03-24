@@ -41,10 +41,14 @@ public abstract class Canvas extends Frame {
      * @return the graphics object for the canvas
      */
     public Graphics getGraphics() {
-        // App code that grabs a Graphics directly is opting into owner-driven drawing rather than
-        // repaint-managed paint(Graphics). Runtime paints use runtimeGraphics() instead, so this
-        // flag cleanly separates direct frame loops from normal paint callbacks.
-        directGraphicsMode = true;
+        DoJaRuntime runtime = DoJaRuntime.current();
+        // Some titles cache a Canvas Graphics instance during construction and still rely on
+        // repaint-managed paint(Graphics) once the Canvas becomes current. Only mark direct mode
+        // when the Canvas is already the active frame and the app is intentionally driving draws
+        // through getGraphics() at runtime.
+        if (runtime != null && runtime.getCurrentFrame() == this) {
+            directGraphicsMode = true;
+        }
         return createGraphics();
     }
 
