@@ -217,10 +217,11 @@ public final class Software3DContext {
         SoftwareTexture texture = primitiveTextures.length == 0 ? null : primitiveTextures[java.lang.Math.max(0, java.lang.Math.min(primitiveTextureIndex, primitiveTextures.length - 1))];
         // opt.ui.j3d keeps color-key and blend bits in the attr word supplied with each draw call.
         Projection projection = optPerspectiveEnabled ? createOptProjection(surfaceWidth, surfaceHeight) : null;
+        boolean invertScreenY = resolveOptPrimitiveScreenYFlip(optViewTransform);
         renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives.getType(), primitives.getParam(), start, count,
                 primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), texture, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
-                optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, true, true);
+                optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, invertScreenY, true);
     }
 
     private void renderModel(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
@@ -460,6 +461,24 @@ public final class Software3DContext {
     // Keep the API split explicit here so the shared software raster can reproduce that contract.
     private static float projectScreenY(int originY, float centerY, float projectedOffsetY, boolean invertScreenY) {
         return originY + centerY + (invertScreenY ? -projectedOffsetY : projectedOffsetY);
+    }
+
+    private static boolean isIdentityTransform(float[] matrix) {
+        return matrix != null
+                && matrix.length >= 12
+                && matrix[0] == 1f && matrix[1] == 0f && matrix[2] == 0f && matrix[3] == 0f
+                && matrix[4] == 0f && matrix[5] == 1f && matrix[6] == 0f && matrix[7] == 0f
+                && matrix[8] == 0f && matrix[9] == 0f && matrix[10] == 1f && matrix[11] == 0f;
+    }
+
+    private static boolean resolveOptPrimitiveScreenYFlip(float[] matrix) {
+        // opt.ui.j3d primitive scenes can submit either a reflected camera basis or
+        // identity-pretransformed billboard vertices, so the screen-Y rule must follow
+        // the submitted view transform instead of assuming one fixed primitive convention.
+        if (isIdentityTransform(matrix)) {
+            return false;
+        }
+        return matrix == null || matrix.length < 6 || matrix[5] >= 0f;
     }
 
     private static void addProjectedPrimitiveQuad(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues,
