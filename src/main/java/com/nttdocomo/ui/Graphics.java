@@ -187,7 +187,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         delegate.dispose();
     }
 
-    public void drawChars(char[] data, int offset, int length, int x, int y) {
+    public void drawChars(char[] data, int x, int y, int offset, int length) {
+        // DoJa uses the order (chars, x, y, offset, length), unlike Java SE/AWT.
         drawString(new String(data, offset, length), x, y);
     }
 
