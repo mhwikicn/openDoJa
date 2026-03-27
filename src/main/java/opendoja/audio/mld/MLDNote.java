@@ -31,12 +31,28 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
-/**
- * Yamaha MA-3 specific synthesis implementation.
- *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
- */
+package opendoja.audio.mld;
 
-package opendoja.audio.mld.ma3;
+
+
+/**
+ * Music note
+ */
+class MLDNote
+	implements BasicNote
+{
+	/**
+	 * Output channel
+	 */
+	int channel;
+	
+	/**
+	 * Ticks before note expires
+	 */
+	int gateTime;
+	
+	/**
+	 * Key index
+	 */
+	int key;
+}

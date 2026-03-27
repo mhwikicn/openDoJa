@@ -31,12 +31,74 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
-/**
- * Yamaha MA-3 specific synthesis implementation.
- *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
- */
+package opendoja.audio.mld;
 
-package opendoja.audio.mld.ma3;
+
+
+/**
+ * Event list state
+ */
+class MLDPlayerTrack
+	implements BasicTrack
+{
+	/**
+	 * Starting cuepoint
+	 */
+	int cuepoint;
+	
+	/**
+	 * Track has no more events
+	 */
+	boolean finished;
+	
+	/**
+	 * Index within sequencer
+	 */
+	int index;
+
+	/**
+	 * Runtime lane-to-channel assignment for the 4 local track lanes.
+	 */
+	final int[] channelMap = new int[4];
+	
+	/**
+	 * Event list
+	 */
+	MLDTrack mld;
+	
+	/**
+	 * Current event offset
+	 */
+	int offset;
+	
+	/**
+	 * Event ticks until next event
+	 */
+	int ticks;
+
+	/**
+	 * Hold the current event position and reuse {@link #ticks} as the next retry
+	 * delay instead of rescheduling from the current event's raw delta byte.
+	 */
+	boolean trackControlSkipReschedule;
+
+	/**
+	 * Replay-cursor byte used by backend-specific track-control engines.
+	 */
+	int trackControlReplayByte;
+
+	/**
+	 * Raw source offset of the current event's delta byte.
+	 */
+	int trackControlRawOffset;
+
+	/**
+	 * Raw source offset immediately after the current event payload.
+	 */
+	int trackControlRawEndOffset;
+
+	/**
+	 * Track-local mode byte used by backend-specific track-control engines.
+	 */
+	int trackControlModeByte;
+}

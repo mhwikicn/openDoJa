@@ -31,12 +31,54 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
+package opendoja.audio.mld;
+
+
+
 /**
- * Yamaha MA-3 specific synthesis implementation.
+ * Rudimentary sample generator that uses sine waves for everything. This class
+ * is intended for basic testing and is not suitable for general use.
  *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
+ * @see SamplerProvider
  */
 
-package opendoja.audio.mld.ma3;
+public class SineSamplerProvider
+	implements SamplerProvider
+{
+	
+	
+	/**
+	 * Key index bias
+	 */
+	static final int A4 = 81;
+	
+	
+	/**
+	 * Create a sampler.
+	 */
+
+	public SineSamplerProvider()
+	{
+	}
+	
+	
+	/**
+	 * Produces an instance of this sampler that can be used to render
+	 * samples.
+	 *
+	 * @param sampleRate The output sampling rate of the rendered samples.
+	 * @return A new sampler instance that can render samples using the
+	 * current
+	 * configuration of this sampler itself.
+	 * @throws IllegalArgumentException if {@code sampleRate} is a
+	 * non-number or is less than or equal to zero.
+	 */
+	@Override
+	public Sampler instance(float sampleRate)
+	{
+		if (Float.isInfinite(sampleRate) || sampleRate <= 0.0f)
+			throw new IllegalArgumentException("Invalid sampling rate.");
+		return new SineSampler(sampleRate);
+	}
+	
+}

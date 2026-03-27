@@ -33,6 +33,8 @@
 
 package opendoja.audio.mld.ma3;
 
+import opendoja.audio.mld.BasicNote;
+
 /**
  * Audio source
  */

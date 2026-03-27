@@ -33,6 +33,8 @@
 
 package opendoja.audio.mld.ma3;
 
+import opendoja.audio.mld.BasicAlgorithm;
+
 /**
  * Template algorithm for OPL synthesis
  */
@@ -235,25 +237,25 @@ class MA3Algorithm
 		this.initVolume();
 	}
 	
-	static MA3Algorithm[] from(RomData defs, boolean isDrum, boolean isWave)
+	static MA3Algorithm[] from(MA3Rom romData, boolean isDrum, boolean isWave)
 	{
 		MA3Algorithm[] ret;
 		
 		// FM presets
 		if (!isWave)
 		{
-			ret = new MA3Algorithm[defs.count];
-			for (int x = 0, n = defs.count; x < n; x++)
-				ret[x] = new MA3Algorithm(defs.bytes(x), isDrum);
+			ret = new MA3Algorithm[romData.count];
+			for (int x = 0, n = romData.count; x < n; x++)
+				ret[x] = new MA3Algorithm(romData.bytes(x), isDrum);
 		}
 		
 		// Wave drum presets
 		else
 		{
 			ret = new MA3Algorithm[61];
-			for (int x = 0, n = defs.count; x < n; x++)
+			for (int x = 0, n = romData.count; x < n; x++)
 			{
-				MA3Algorithm alg = new MA3Algorithm(defs.bytes(x), 0);
+				MA3Algorithm alg = new MA3Algorithm(romData.bytes(x), 0);
 				ret[alg.drumKey - 24] = alg;
 			}
 		}

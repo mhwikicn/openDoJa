@@ -1,7 +1,7 @@
 package com.nttdocomo.ui;
 
-import opendoja.audio.SampledPcmPlayer;
-import opendoja.audio.mld.MldPcmPlayer;
+import opendoja.audio.SampledPCMPlayer;
+import opendoja.audio.mld.MLDPCMPlayer;
 import opendoja.host.DoJaProfile;
 import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
@@ -51,8 +51,8 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
     private final Audio3D audio3D = new Audio3D(this);
     private MediaResource resource;
     private MediaListener mediaListener;
-    private SampledPcmPlayer sampledPlayer;
-    private MldPcmPlayer mldPlayer;
+    private SampledPCMPlayer sampledPlayer;
+    private MLDPCMPlayer mldPlayer;
     private Sequencer sequencer;
     private int pausedPosition;
     private int syncEventChannel = -1;
@@ -64,7 +64,7 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         // DoJa titles often construct presenters during loading and expect the first MLD effect
         // play to be low-latency. Create the long-lived MLD backend up front so menu input does
         // not pay the handle/worker setup cost the first time a prepared effect is triggered.
-        mldPlayer = new MldPcmPlayer(new MldListener());
+        mldPlayer = new MLDPCMPlayer(new MldListener());
     }
 
     /**
@@ -134,13 +134,13 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
                 sequencer.start();
             } else if (prepared.kind() == MediaManager.PreparedSound.Kind.MLD) {
                 if (mldPlayer == null) {
-                    mldPlayer = new MldPcmPlayer(new MldListener());
+                    mldPlayer = new MLDPCMPlayer(new MldListener());
                 }
                 mldPlayer.setVolumeLevel(currentVolumeLevel());
                 mldPlayer.start(prepared, loopCount);
             } else {
                 if (sampledPlayer == null) {
-                    sampledPlayer = new SampledPcmPlayer(new SampledListener());
+                    sampledPlayer = new SampledPCMPlayer(new SampledListener());
                 }
                 sampledPlayer.setVolumeLevel(currentVolumeLevel());
                 sampledPlayer.start(prepared, loopCount);
@@ -389,7 +389,7 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         syncEventTasks.clear();
     }
 
-    private final class MldListener implements MldPcmPlayer.Listener {
+    private final class MldListener implements MLDPCMPlayer.Listener {
         @Override
         public void onLoop() {
             notifyListener(AUDIO_LOOPED, 0);
@@ -413,7 +413,7 @@ public class AudioPresenter implements MediaPresenter, AutoCloseable {
         }
     }
 
-    private final class SampledListener implements SampledPcmPlayer.Listener {
+    private final class SampledListener implements SampledPCMPlayer.Listener {
         @Override
         public void onLoop() {
             notifyListener(AUDIO_LOOPED, 0);

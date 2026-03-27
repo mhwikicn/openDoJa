@@ -33,6 +33,9 @@
 
 package opendoja.audio.mld.ma3;
 
+import opendoja.audio.mld.Sampler;
+import opendoja.audio.mld.SamplerProvider;
+
 /**
  * Sample generator that mimics YAMAHA MA-3. Supports FM synthesis using MA-2
  * or MA-3 presets as well as wave drums.<br><br>
@@ -183,49 +186,49 @@ public class MA3SamplerProvider
 	 * Drum algorithms for MA-2
 	 */
 	static final MA3Algorithm[] MA2_DRUMS = MA3Algorithm.from(
-		RomData.MA2_DRUMS, true, false);
+		MA3Rom.MA2_DRUMS, true, false);
 	
 	/**
 	 * Instrument algorithms for MA-2
 	 */
 	static final MA3Algorithm[] MA2_INSTRUMENTS = MA3Algorithm.from(
-		RomData.MA2_INSTRUMENTS, false, false);
+		MA3Rom.MA2_INSTRUMENTS, false, false);
 	
 	/**
 	 * FM drum algorithms for MA-3, 2 operators
 	 */
 	static final MA3Algorithm[] MA3_DRUMS_2OP = MA3Algorithm.from(
-		RomData.MA3_DRUMS_2OP, true, false);
+		MA3Rom.MA3_DRUMS_2OP, true, false);
 	
 	/**
 	 * FM drum algorithms for MA-3, 4 operators
 	 */
 	static final MA3Algorithm[] MA3_DRUMS_4OP = MA3Algorithm.from(
-		RomData.MA3_DRUMS_4OP, true, false);
+		MA3Rom.MA3_DRUMS_4OP, true, false);
 	
 	/**
 	 * Wave drum algorithms for MA-3
 	 */
 	static final MA3Algorithm[] MA3_DRUMS_WAVE = MA3Algorithm.from(
-		RomData.MA3_DRUMS_WAVE, true, true);
+		MA3Rom.MA3_DRUMS_WAVE, true, true);
 	
 	/**
 	 * FM instrument algorithms for MA-3, 2 operators
 	 */
 	static final MA3Algorithm[] MA3_INSTRUMENTS_2OP = MA3Algorithm.from(
-		RomData.MA3_INSTRUMENTS_2OP, false, false);
+		MA3Rom.MA3_INSTRUMENTS_2OP, false, false);
 	
 	/**
 	 * FM instrument algorithms for MA-3, 4 operators
 	 */
 	static final MA3Algorithm[] MA3_INSTRUMENTS_4OP = MA3Algorithm.from(
-		RomData.MA3_INSTRUMENTS_4OP, false, false);
+		MA3Rom.MA3_INSTRUMENTS_4OP, false, false);
 	
 	/**
 	 * Wave synthesis ROM for MA-3
 	 */
 	static final int[][] MA3_WAVEROM = MA3SamplerProvider.waveRom(
-		RomData.MA3_WAVEROM);
+		MA3Rom.MA3_WAVEROM);
 	
 	static final double MAGIC_B = 12 / Math.log(2);
 	
@@ -687,12 +690,12 @@ public class MA3SamplerProvider
 	/**
 	 * Decode initial wave ROM banks
 	 */
-	static int[][] waveRom(RomData roms)
+	static int[][] waveRom(MA3Rom romData)
 	{
 		int[][] ret = new int[8][];
-		for (int x = 0, n = roms.count; x < n; x++)
+		for (int x = 0, n = romData.count; x < n; x++)
 		{
-			byte[] adpcm = roms.bytes(x);
+			byte[] adpcm = romData.bytes(x);
 			ret[x] = MA3SamplerProvider.decodeAICA(adpcm, 0, adpcm.length);
 		}
 		return ret;

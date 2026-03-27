@@ -1,11 +1,11 @@
 package opendoja.demo;
 
-import opendoja.audio.mld.ma3.MLD;
+import opendoja.audio.mld.MLD;
 import opendoja.audio.mld.ma3.MA3SamplerProvider;
-import opendoja.audio.mld.ma3.MLDPlayer;
-import opendoja.audio.mld.ma3.MLDPlayerEvent;
-import opendoja.audio.mld.ma3.RomData;
-import opendoja.audio.mld.ma3.Sampler;
+import opendoja.audio.mld.MLDPlayer;
+import opendoja.audio.mld.MLDPlayerEvent;
+import opendoja.audio.mld.ma3.MA3Rom;
+import opendoja.audio.mld.Sampler;
 
 import java.lang.reflect.Field;
 import java.nio.file.Files;
@@ -80,13 +80,13 @@ public final class Ma3ParityProbe {
     }
 
     private static void romSummary() throws Exception {
-        summarizeRom("MA3_INSTRUMENTS_4OP", RomData.MA3_INSTRUMENTS_4OP, false);
-        summarizeRom("MA3_INSTRUMENTS_2OP", RomData.MA3_INSTRUMENTS_2OP, false);
-        summarizeRom("MA3_DRUMS_4OP", RomData.MA3_DRUMS_4OP, true);
-        summarizeRom("MA3_DRUMS_2OP", RomData.MA3_DRUMS_2OP, true);
+        summarizeRom("MA3_INSTRUMENTS_4OP", MA3Rom.MA3_INSTRUMENTS_4OP, false);
+        summarizeRom("MA3_INSTRUMENTS_2OP", MA3Rom.MA3_INSTRUMENTS_2OP, false);
+        summarizeRom("MA3_DRUMS_4OP", MA3Rom.MA3_DRUMS_4OP, true);
+        summarizeRom("MA3_DRUMS_2OP", MA3Rom.MA3_DRUMS_2OP, true);
     }
 
-    private static void summarizeRom(String label, RomData romData, boolean drum) {
+    private static void summarizeRom(String label, MA3Rom romData, boolean drum) {
         int algorithmCount = romCount(romData);
         int vibratoOperators = 0;
         int tremoloOperators = 0;
@@ -134,7 +134,7 @@ public final class Ma3ParityProbe {
         if (paths.length == 0) {
             throw new IllegalArgumentException("mld-summary requires one or more file paths");
         }
-        Class<?> eventClass = Class.forName("opendoja.audio.mld.ma3.MLDEvent");
+        Class<?> eventClass = Class.forName("opendoja.audio.mld.MLDEvent");
         Field typeField = declaredField(eventClass, "type");
         Field bankField = declaredField(eventClass, "bank");
         Field programField = declaredField(eventClass, "program");
@@ -273,7 +273,7 @@ public final class Ma3ParityProbe {
         return field;
     }
 
-    private static int romCount(RomData romData) {
+    private static int romCount(MA3Rom romData) {
         int count = 0;
         while (true) {
             try {
@@ -291,7 +291,7 @@ public final class Ma3ParityProbe {
             int bank = entry.getKey();
             for (int program : entry.getValue()) {
                 int preset = ((bank < 2 ? 0 : (bank & 1) << 6) | (program & 0x3F));
-                byte[] bytes = RomData.MA3_INSTRUMENTS_4OP.bytes(preset);
+                byte[] bytes = MA3Rom.MA3_INSTRUMENTS_4OP.bytes(preset);
                 int algorithm = bytes[1] & 0x7;
                 int operatorCount = algorithm < 2 ? 2 : 4;
                 int vibratoOperators = 0;

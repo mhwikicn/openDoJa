@@ -1,7 +1,7 @@
 package opendoja.demo;
 
 import opendoja.audio.mld.ma3.MA3SamplerProvider;
-import opendoja.audio.mld.ma3.Sampler;
+import opendoja.audio.mld.Sampler;
 
 public final class Ma3DrumProbe {
     private Ma3DrumProbe() {

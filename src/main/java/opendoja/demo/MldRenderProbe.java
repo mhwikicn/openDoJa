@@ -1,12 +1,15 @@
 package opendoja.demo;
 
+import opendoja.audio.mld.fuetrek.FueTrekSamplerProvider;
 import opendoja.audio.mld.ma3.MA3SamplerProvider;
-import opendoja.audio.mld.ma3.MLD;
-import opendoja.audio.mld.ma3.MLDPlayer;
-import opendoja.audio.mld.ma3.MLDPlayerEvent;
+import opendoja.audio.mld.MLD;
+import opendoja.audio.mld.MLDPlayer;
+import opendoja.audio.mld.MLDPlayerEvent;
+import opendoja.audio.mld.SamplerProvider;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 public final class MldRenderProbe {
     private MldRenderProbe() {
@@ -14,30 +17,52 @@ public final class MldRenderProbe {
 
     public static void main(String[] args) throws Exception {
         DemoLog.enableInfoLogging();
-        if (args.length != 1) {
-            throw new IllegalArgumentException("usage: MldRenderProbe <scratchpad-or-mld-file>");
+        if (args.length < 1 || args.length > 2) {
+            throw new IllegalArgumentException("usage: MldRenderProbe <scratchpad-or-mld-file> [iterations]");
         }
         byte[] source = Files.readAllBytes(Path.of(args[0]));
         byte[] mldBytes = firstMeloChunk(source);
         MLD mld = new MLD(mldBytes);
-        MLDPlayer player = new MLDPlayer(mld,
-                new MA3SamplerProvider(
-                        MA3SamplerProvider.FM_MA3_4OP,
-                        MA3SamplerProvider.FM_MA3_4OP,
-                        MA3SamplerProvider.WAVE_DRUM_MA3),
-                MA3SamplerProvider.SAMPLE_RATE);
+        int iterations = args.length >= 2 ? Integer.parseInt(args[1]) : 8;
+        if (iterations < 0) {
+            throw new IllegalArgumentException("iterations must be non-negative");
+        }
+        String synth = System.getProperty("opendoja.mldSynth", "ma3").trim().toLowerCase(Locale.ROOT);
+        SamplerProvider provider;
+        float sampleRate;
+        if ("fuetrek".equals(synth)) {
+            provider = new FueTrekSamplerProvider();
+            sampleRate = FueTrekSamplerProvider.SAMPLE_RATE;
+        } else {
+            provider = new MA3SamplerProvider(
+                    MA3SamplerProvider.FM_MA3_4OP,
+                    MA3SamplerProvider.FM_MA3_4OP,
+                    MA3SamplerProvider.WAVE_DRUM_MA3);
+            sampleRate = MA3SamplerProvider.SAMPLE_RATE;
+        }
+        MLDPlayer player = new MLDPlayer(mld, provider, sampleRate);
         player.setPlaybackEventsEnabled(true);
         float[] samples = new float[256 * 2];
         double energy = 0.0;
+        float peak = 0.0f;
+        int hardClipped = 0;
         int framesRendered = 0;
         int loopEvents = 0;
         int endEvents = 0;
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < iterations; i++) {
             int frames = player.render(samples, 0, 256);
             if (frames > 0) {
                 framesRendered += frames;
                 for (int s = 0; s < frames * 2; s++) {
-                    energy += samples[s] * samples[s];
+                    float sample = samples[s];
+                    float abs = Math.abs(sample);
+                    energy += sample * sample;
+                    if (abs > peak) {
+                        peak = abs;
+                    }
+                    if (abs >= 1.0f) {
+                        hardClipped++;
+                    }
                 }
             }
             for (MLDPlayerEvent event : player.getEvents()) {
@@ -54,6 +79,8 @@ public final class MldRenderProbe {
         double rms = framesRendered == 0 ? 0.0 : Math.sqrt(energy / (framesRendered * 2.0));
         DemoLog.info(MldRenderProbe.class, "frames=" + framesRendered
                 + " rms=" + rms
+                + " max=" + peak
+                + " hard=" + hardClipped
                 + " loopEvents=" + loopEvents
                 + " endEvents=" + endEvents
                 + " duration=" + mld.getDuration(true));
@@ -73,6 +100,6 @@ public final class MldRenderProbe {
             System.arraycopy(source, i, mld, 0, mld.length);
             return mld;
         }
-        throw new IllegalArgumentException("No melo chunk found");
+        return source;
     }
 }

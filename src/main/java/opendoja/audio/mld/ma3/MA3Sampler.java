@@ -8,6 +8,8 @@
 // ---------------------------------------------------------------------------
 
 package opendoja.audio.mld.ma3;
+
+import opendoja.audio.mld.Sampler;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;

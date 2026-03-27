@@ -31,12 +31,53 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
+package opendoja.audio.mld;
+
+
+
 /**
- * Yamaha MA-3 specific synthesis implementation.
+ * Notifies of a scenario that arises during playback. When configured,
+ * the
+ * {@code render()} methods will terminate early any time an event
+ * condition is satisfied. Events are obtained by the caller and
+ * acknowledged via {@link MLDPlayer#getEvents()}.
  *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
+ * @see MLDPlayer#getEvents()
  */
 
-package opendoja.audio.mld.ma3;
+public class MLDPlayerEvent
+	implements BasicEvent
+{
+	
+	/**
+	 * Additional event data, if relevant. For {@code EVENT_KEY} events,
+	 * this will be the key number.
+	 */
+
+	public final int data;
+	
+	/**
+	 * Time in seconds since the beginning of playback when the event was
+	 * raised.
+	 */
+
+	public final double time;
+	
+	/**
+	 * Indicates the type of event that was raised: {@code EVENT_END},
+	 * {@code EVENT_KEY} or {@code EVENT_LOOP}.
+	 */
+
+	public final int type;
+	
+	/**
+	 * Internal constructor
+	 */
+
+	MLDPlayerEvent(double time, int type, int data)
+	{
+		this.data = data;
+		this.time = time;
+		this.type = type;
+	}
+}

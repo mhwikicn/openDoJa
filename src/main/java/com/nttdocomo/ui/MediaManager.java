@@ -2,7 +2,7 @@ package com.nttdocomo.ui;
 
 import com.nttdocomo.io.ConnectionException;
 import com.nttdocomo.lang.IterationAbortedException;
-import opendoja.audio.mld.ma3.MLD;
+import opendoja.audio.mld.MLD;
 import opendoja.host.DoJaRuntime;
 
 import javax.imageio.ImageIO;

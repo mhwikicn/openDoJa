@@ -31,12 +31,63 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
-/**
- * Yamaha MA-3 specific synthesis implementation.
- *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
- */
+package opendoja.audio.mld;
 
-package opendoja.audio.mld.ma3;
+
+
+/**
+ * Music note
+ */
+class SineNote
+	implements BasicNote
+{
+	/**
+	 * Amount to increment phase per frame
+	 */
+	float advance;
+	
+	/**
+	 * Encapsulating channel
+	 */
+	SineChannel channel;
+	
+	/**
+	 * Base frequency
+	 */
+	float freqBase;
+	
+	/**
+	 * Note is currently active on its key
+	 */
+	boolean playing;
+	
+	/**
+	 * Base volume
+	 */
+	float volBase;
+	
+	/**
+	 * Current left stereo volume
+	 */
+	float volLeftLevel;
+	
+	/**
+	 * Target left stereo volume
+	 */
+	float volLeftTarget;
+	
+	/**
+	 * Current right stereo volume
+	 */
+	float volRightLevel;
+	
+	/**
+	 * Target right stereo volume
+	 */
+	float volRightTarget;
+	
+	/**
+	 * Position in wave period
+	 */
+	float wavPhase;
+}

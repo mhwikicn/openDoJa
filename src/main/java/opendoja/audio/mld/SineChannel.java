@@ -31,37 +31,17 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
-package opendoja.audio.mld.ma3;
-
-import opendoja.audio.mld.BasicChannel;
+package opendoja.audio.mld;
 
 
 import java.util.ArrayList;
-import java.util.Arrays;
 
 /**
  * Output channel
  */
-class MA3Channel
+class SineChannel
 	implements BasicChannel
 {
-	/**
-	 * Index in sampler
-	 */
-	final int index;
-	
-	/**
-	 * Encapsulating instance
-	 */
-	final MA3Sampler instance;
-	
-	/**
-	 * All notes currently on keys
-	 */
-	final MA3Note[] notesOn;
-	
-	final ArrayList<MA3Note> notesOut;
-	
 	/**
 	 * Pitch bend base ratio
 	 */
@@ -78,29 +58,24 @@ class MA3Channel
 	float bendRange;
 	
 	/**
-	 * The channel plays drum notes
+	 * Index in sampler
 	 */
-	boolean isDrum;
+	int index;
 	
 	/**
-	 * Program bank
+	 * All notes currently on keys
 	 */
-	int prgBank;
+	SineNote[] notesOn;
 	
 	/**
-	 * Program index in bank
+	 * All notes that are generating output
 	 */
-	int prgProgram;
+	ArrayList<SineNote> notesOut;
 	
 	/**
 	 * Left stereo amplitude
 	 */
 	float volLeft;
-	
-	/**
-	 * Left stereo output amplitude
-	 */
-	float volLeftOut;
 	
 	/**
 	 * Channel output amplitude
@@ -116,79 +91,4 @@ class MA3Channel
 	 * Right stereo amplitude
 	 */
 	float volRight;
-	
-	/**
-	 * Right stereo output amplitude
-	 */
-	float volRightOut;
-	
-	MA3Channel(MA3Sampler instance, int index)
-	{
-		this.index = index;
-		this.instance = instance;
-		//  C-2 .. G8
-		this.notesOn = new MA3Note[128];
-		this.notesOut = new ArrayList<>();
-	}
-	
-	/**
-	 * Frequency has changed
-	 */
-	void onFrequency()
-	{
-		float bend = this.instance.bendOut * this.bendOut;
-		for (MA3Note note : this.notesOut)
-			note.onFrequency(bend);
-	}
-	
-	/**
-	 * Volume has changed
-	 */
-	void onVolume()
-	{
-		MA3Sampler instance = this.instance;
-		
-		this.volLeftOut = instance.volOut * this.volLeft;
-		this.volRightOut = instance.volOut * this.volRight;
-		for (MA3Note note : this.notesOut)
-			note.onVolume();
-	}
-	
-	/**
-	 * Render the next input sample
-	 */
-	void render()
-	{
-		ArrayList<MA3Note> notesOut = this.notesOut;
-		for (int x = 0; x < notesOut.size(); x++)
-		{
-			if (notesOut.get(x).render())
-				notesOut.remove(x--);
-		}
-	}
-	
-	/**
-	 * Initialize state
-	 */
-	void reset()
-	{
-		this.bendBase = 0.0f;
-		this.bendOut = 1.0f;
-		this.bendRange = 2.0f;
-		this.isDrum = false;
-		this.prgBank = 0;
-		this.prgProgram = 0;
-		this.volLevel = 1.0f;
-		this.volPanning = 0.5f;
-		this.volLeft = 0.5f;
-		this.volLeftOut = 0.5f;
-		this.volRight = 0.5f;
-		this.volRightOut = 0.5f;
-		
-		// Stop playing all notes (not calling note.onFrequency())
-		Arrays.fill(this.notesOn, null);
-		for (MA3Note note : this.notesOut)
-			note.stop();
-	}
-	
 }

@@ -31,12 +31,29 @@
 // For more information, please refer to <https://unlicense.org/>
 // ---------------------------------------------------------------------------
 
+package opendoja.audio.mld;
+
+
+
 /**
- * Yamaha MA-3 specific synthesis implementation.
- *
- * <p>Generic MLD parsing, sequencing, and sampler interfaces live in
- * {@code opendoja.audio.mld}. This package only contains the MA-3 backend
- * and its ROM data.
+ * Sample generator for music sequencer players. Invoking {@code instance()}
+ * will produce an object that can be used to render the actual samples of
+ * audio.
  */
 
-package opendoja.audio.mld.ma3;
+public interface SamplerProvider
+{
+	/**
+	 * Produces an instance of this sampler that can be used to render
+	 * samples.
+	 *
+	 * @param sampleRate The output sampling rate of the rendered samples.
+	 * @return A new sampler instance that can render samples using the
+	 * current
+	 * configuration of this sampler itself.
+	 * @throws IllegalArgumentException if {@code sampleRate} is a
+	 * non-number or is less than or equal to zero.
+	 */
+
+	Sampler instance(float sampleRate);
+}
