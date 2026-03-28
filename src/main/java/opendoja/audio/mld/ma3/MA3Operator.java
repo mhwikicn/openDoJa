@@ -42,17 +42,6 @@ class MA3Operator
 	implements BasicOperator
 {
 	/**
-	 * Enable the Yamaha-style EVB/DVB pitch path by default.
-	 *
-	 * The MA-3 preset ROM uses EVB operators heavily, native Yamaha binaries
-	 * expose dedicated pitch helpers, and probe renders show the path changes
-	 * vibrato-enabled content while leaving non-vibrato presets bit-identical.
-	 * Keep an opt-out switch in case stronger native parity evidence requires it.
-	 */
-	private static final boolean ENABLE_VIBRATO =
-		!Boolean.getBoolean("opendoja.ma3DisableVibrato");
-
-	/**
 	 * OPL registers
 	 * Envelope attack rate
 	 */
@@ -523,18 +512,22 @@ class MA3Operator
 		this.oscPhase +=
 			(note.f_number << note.block >> 1) * constMultis[this.multi] >> 1;
 		
-		// Available Yamaha-oriented references point to the below EVB/DVB pitch
-		// path, even though earlier output checks did not show a strong audible
-		// difference and ATS-MA3-N did not make the effect obvious in isolation.
-		// Keep the logic here, behind the runtime toggle above, because the MA-3
-		// preset data uses EVB operators heavily and the native binaries expose
-		// dedicated vibrato helpers for the same path.
+		// GuyPerfect said: "According to available resources, the below algorithm should be
+		// correct for vibrato, but no significance has been observed and
+		// the output from ATS-MA3-N is no different. It has been disabled
+		// pending further reserach. A real MA-3 may be needed."
 		//
-		// The DVB settings in the MA-2 algorithms are still a point to watch.
-		// ATS-MA2-N models DVB with two bits even though the corresponding OPL
-		// register uses one bit, so MA-2 preset definitions may need further
-		// adjustment if stronger native parity evidence changes this behavior.
-		if (ENABLE_VIBRATO && this.evb)
+		// openDoJa intentionally enables it anyway: the MA-3 preset data uses
+		// EVB operators heavily, native Yamaha binaries expose dedicated
+		// vibrato helpers for the same path, and probe renders show the path
+		// changes vibrato-enabled content while leaving non-vibrato presets
+		// bit-identical.
+		//
+		// The DVB settings in the MA-2 algorithms are as defined in
+		// ATS-MA2-N, with two bits, although the OPL register only uses
+		// one bit for DVB. The MA-2 presets may need to be adjusted once
+		// the vibrato thing is pinned down.
+		if (this.evb)
 		{
 			this.oscPhase +=
 				(instance.vibPhase << 19 >> 31 ^ note.f_number >>
