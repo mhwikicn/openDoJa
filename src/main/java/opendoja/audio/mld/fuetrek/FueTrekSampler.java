@@ -2,6 +2,7 @@ package opendoja.audio.mld.fuetrek;
 
 import opendoja.audio.mld.MLD;
 import opendoja.audio.mld.Sampler;
+import opendoja.host.OpenDoJaLog;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -121,8 +122,8 @@ final class FueTrekSampler implements Sampler {
                 MIX_PROFILE_MODE,
                 nextVoiceAge++);
         if (DEBUG_NOTES) {
-            System.err.printf(
-                    "[FueTrekNote] ch=%d key=%d noteByte=%d group=0x%02x sub=%d sel=%d rootA=%d rootB=%d tuneA=%d tuneB=%d baseNote=%d staticQ16=%d oscBMode=%d%n",
+            OpenDoJaLog.debug(FueTrekSampler.class, String.format(
+                    "[FueTrekNote] ch=%d key=%d noteByte=%d group=0x%02x sub=%d sel=%d rootA=%d rootB=%d tuneA=%d tuneB=%d baseNote=%d staticQ16=%d oscBMode=%d",
                     channel,
                     key,
                     resolved.noteByte,
@@ -135,7 +136,7 @@ final class FueTrekSampler implements Sampler {
                     voice.tuneB,
                     voice.baseNote,
                     voice.staticPitchQ16,
-                    voice.oscBMode);
+                    voice.oscBMode));
         }
         int slotIndex = allocateVoiceSlot();
         if (slotIndex < 0) {
@@ -414,7 +415,7 @@ final class FueTrekSampler implements Sampler {
             sb.append(i == offset ? " payload=" : " ");
             sb.append(String.format("%02x", message[i] & 0xff));
         }
-        System.err.println(sb);
+        OpenDoJaLog.debug(FueTrekSampler.class, sb.toString());
     }
 
     @Override
