@@ -71,6 +71,7 @@ public interface Sampler
 	enum SequenceControlMode
 	{
 		NONE,
+		TRACK_CONTROL,
 		FUETREK
 	}
 

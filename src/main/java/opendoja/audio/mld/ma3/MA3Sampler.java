@@ -556,6 +556,12 @@ public class MA3Sampler
 			chan.reset();
 		Arrays.fill(this.wavDrums, null);
 	}
+
+	@Override
+	public SequenceControlMode sequenceControlMode()
+	{
+		return SequenceControlMode.TRACK_CONTROL;
+	}
 	
 	/** Terminate all active notes. */
 	public void stopAll()

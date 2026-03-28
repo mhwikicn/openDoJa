@@ -9,9 +9,9 @@ interface TrackControlEngine
 	static TrackControlEngine create(Sampler.SequenceControlMode mode,
 		int trackCount)
 	{
-		if (mode == Sampler.SequenceControlMode.FUETREK)
-			return new FueTrekTrackControlEngine(trackCount);
-		return TrackControlEngine.NONE;
+		if (mode == Sampler.SequenceControlMode.NONE)
+			return TrackControlEngine.NONE;
+		return new SharedTrackControlEngine(trackCount, mode);
 	}
 
 	default boolean handleExtB(MLDPlayer player, MLDPlayerTrack track,
@@ -39,15 +39,18 @@ interface TrackControlEngine
 	}
 }
 
-final class FueTrekTrackControlEngine
+final class SharedTrackControlEngine
 	implements TrackControlEngine
 {
 	private final TrackControlGroupState[] groups;
 
+	private final Sampler.SequenceControlMode mode;
+
 	private boolean restartRequested;
 
-	FueTrekTrackControlEngine(int trackCount)
+	SharedTrackControlEngine(int trackCount, Sampler.SequenceControlMode mode)
 	{
+		this.mode = mode;
 		this.groups = new TrackControlGroupState[4];
 		for (int i = 0; i < this.groups.length; i++)
 			this.groups[i] = new TrackControlGroupState(trackCount);
@@ -106,7 +109,11 @@ final class FueTrekTrackControlEngine
 	@Override
 	public boolean usesRuntimeChannelMap()
 	{
-		return true;
+		return switch (this.mode)
+		{
+			case FUETREK -> true;
+			case NONE, TRACK_CONTROL -> false;
+		};
 	}
 
 	private void snapshotGroup(MLDPlayer player, TrackControlGroupState group,
