@@ -100,7 +100,7 @@ public interface Sampler
 	 * @return {@code true} if there are no notes generating any output.
 	 */
 	boolean isFinished();
-	
+
 	/**
 	 * Deactivate a key that has previoulsy been activated on a channel.
 	 * If no key is currently active on the channel, no action is taken.
