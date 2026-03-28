@@ -440,6 +440,20 @@ final class FueTrekSampler implements Sampler {
 
     @Override
     public void handleExtBEvent(int eventId, int channel, int rawParam) {
+        if ((eventId & 0xff) == MLD.EVENT_X_DRUM_ENABLE) {
+            int targetChannel = (rawParam >> 3) & 0xf;
+            ChannelState target = channel(targetChannel);
+            if (target == null) {
+                return;
+            }
+            // lib002 player `0x1000f48a` / synth sink `0x10002d14` prove `0xba`
+            // targets the encoded channel `(raw >> 3) & 0xf`, keeps the full
+            // 3-bit family mode, and forwards the raw upper nibble as the
+            // per-channel profile index `+ 3`.
+            target.applyFamilyMode(rawParam & 0x7);
+            target.nativePanModeIndex = clampRange((rawParam >> 4) + 3, 0, 0xff);
+            return;
+        }
         ChannelState state = channel(channel);
         if (state == null) {
             return;
@@ -457,9 +471,6 @@ final class FueTrekSampler implements Sampler {
             case 0xb1:
                 // Same visible contract as 0xb0, but cached into player +0xf55.
                 rawGlobalLaneB1 = rawParam & 0x7f;
-                return;
-            case MLD.EVENT_X_DRUM_ENABLE:
-                state.applyFamilyMode(rawParam & 0x7);
                 return;
             case MLD.EVENT_PROGRAM_CHANGE:
                 state.program = value;

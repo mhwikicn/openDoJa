@@ -1,4 +1,4 @@
-package opendoja.demo;
+package opendoja.tools;
 
 import opendoja.audio.mld.MLD;
 import opendoja.audio.mld.MLDPlayer;
