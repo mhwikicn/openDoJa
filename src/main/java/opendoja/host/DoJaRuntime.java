@@ -9,6 +9,7 @@ import com.nttdocomo.ui.IApplication;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.Timer;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import java.awt.Color;
@@ -16,6 +17,8 @@ import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
@@ -45,6 +48,9 @@ public final class DoJaRuntime {
     private static final boolean TRACE_EVENTS = Boolean.getBoolean("opendoja.traceEvents");
     private static final long MINIMUM_SELECT_PRESS_NANOS =
             java.lang.Math.max(0L, Long.getLong("opendoja.input.minimumSelectPressMs", 75L)) * 1_000_000L;
+    // A short release debounce collapses desktop auto-repeat release/press pairs into a stable hold.
+    private static final int KEY_REPEAT_RELEASE_DEBOUNCE_MS =
+            java.lang.Math.max(0, Integer.getInteger("opendoja.input.keyRepeatReleaseDebounceMs", 25));
     private static volatile DoJaRuntime current;
 
     private final LaunchConfig config;
@@ -646,33 +652,53 @@ public final class DoJaRuntime {
     private static final class HostPanel extends JPanel {
         private static final int SCALE = 2;
         private final DoJaRuntime runtime;
+        private final DesktopKeyInputAdapter keyInputAdapter;
 
         private HostPanel(DoJaRuntime runtime) {
             this.runtime = runtime;
+            this.keyInputAdapter = new DesktopKeyInputAdapter(this::scheduleRelease, runtime::dispatchSyntheticKey,
+                    KEY_REPEAT_RELEASE_DEBOUNCE_MS);
             setPreferredSize(new Dimension(runtime.displayWidth() * SCALE, runtime.displayHeight() * SCALE));
             setBackground(Color.BLACK);
             setOpaque(true);
             setFocusable(true);
+            addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusLost(FocusEvent e) {
+                    keyInputAdapter.releaseAll();
+                }
+            });
             addKeyListener(new KeyAdapter() {
                 @Override
                 public void keyPressed(KeyEvent e) {
-                    dispatchKey(e, Display.KEY_PRESSED_EVENT);
+                    dispatchKey(e);
                 }
 
                 @Override
                 public void keyReleased(KeyEvent e) {
-                    dispatchKey(e, Display.KEY_RELEASED_EVENT);
+                    dispatchKey(e);
                 }
 
-                private void dispatchKey(KeyEvent event, int eventType) {
+                private void dispatchKey(KeyEvent event) {
                     int dojaKey = runtime.mapKeyCode(event.getKeyCode());
                     if (dojaKey < 0) {
                         return;
                     }
-                    runtime.dispatchSyntheticKey(dojaKey, eventType);
+                    if (event.getID() == KeyEvent.KEY_PRESSED) {
+                        keyInputAdapter.keyPressed(dojaKey);
+                    } else if (event.getID() == KeyEvent.KEY_RELEASED) {
+                        keyInputAdapter.keyReleased(dojaKey);
+                    }
                     event.consume();
                 }
             });
+        }
+
+        private DesktopKeyInputAdapter.PendingRelease scheduleRelease(int delayMillis, Runnable task) {
+            Timer timer = new Timer(java.lang.Math.max(0, delayMillis), e -> task.run());
+            timer.setRepeats(false);
+            timer.start();
+            return timer::stop;
         }
 
         @Override
