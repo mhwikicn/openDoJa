@@ -19,7 +19,7 @@ public final class Base64 {
      * @throws IllegalArgumentException if {@code value} is not valid Base64
      */
     public static byte[] decode(String value) {
-        return java.util.Base64.getDecoder().decode(value);
+        return java.util.Base64.getMimeDecoder().decode(value);
     }
 
     /**
@@ -31,7 +31,7 @@ public final class Base64 {
      * @throws IllegalArgumentException if {@code value} is not valid Base64
      */
     public static byte[] decode(byte[] value) {
-        return java.util.Base64.getDecoder().decode(value);
+        return java.util.Base64.getMimeDecoder().decode(value);
     }
 
     /**

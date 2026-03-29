@@ -85,7 +85,7 @@ class _BitmapFont extends Font {
 
     @Override
     public int getBBoxHeight(String text) {
-        String value = Font.requireString(text, "text");
+        String value = Font.metricString(text);
         if (value.isEmpty()) {
             return 0;
         }
@@ -99,7 +99,7 @@ class _BitmapFont extends Font {
 
     @Override
     public int getBBoxWidth(String text) {
-        String value = Font.requireString(text, "text");
+        String value = Font.metricString(text);
         int width = 0;
         for (String line : value.split("\\r?\\n", -1)) {
             width = Math.max(width, lineWidth(line));

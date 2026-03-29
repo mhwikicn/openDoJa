@@ -254,7 +254,7 @@ public class Font {
      * @throws NullPointerException if {@code text} is {@code null}
      */
     public int stringWidth(String text) {
-        return metrics().stringWidth(requireString(text, "text"));
+        return metrics().stringWidth(metricString(text));
     }
 
     /**
@@ -334,7 +334,7 @@ public class Font {
      * @throws NullPointerException if {@code text} is {@code null}
      */
     public int getBBoxHeight(String text) {
-        return requireString(text, "text").isEmpty() ? 0 : getHeight();
+        return metricString(text).isEmpty() ? 0 : getHeight();
     }
 
     /**
@@ -449,6 +449,10 @@ public class Font {
             throw new NullPointerException(name);
         }
         return text;
+    }
+
+    static String metricString(String text) {
+        return text == null ? "" : text;
     }
 
     static String requireXString(XString text, String name) {

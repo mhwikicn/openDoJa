@@ -100,13 +100,29 @@ public class BufferedReader extends Reader {
     /**
      * Tests whether the stream can be read.
      *
-     * @return {@code true} if the next {@code read} method is guaranteed not to
-     *         block; otherwise {@code false}
+     * <p>DoJa titles often use this as an end-of-input probe before calling
+     * {@link #readLine()}, especially on scratchpad-backed resources. Java's
+     * {@link java.io.BufferedReader#ready()} only answers whether a read is
+     * non-blocking, which can be {@code false} for readable file slices. To
+     * preserve DoJa compatibility, peek one character ahead when the delegate
+     * does not already report ready.
+     *
+     * @return {@code true} if another character can be read; otherwise
+     *         {@code false}
      * @throws IOException if an I/O error occurs
      */
     @Override
     public boolean ready() throws IOException {
-        return delegate.ready();
+        if (delegate.ready()) {
+            return true;
+        }
+        if (!delegate.markSupported()) {
+            return false;
+        }
+        delegate.mark(1);
+        int next = delegate.read();
+        delegate.reset();
+        return next >= 0;
     }
 
     /**
