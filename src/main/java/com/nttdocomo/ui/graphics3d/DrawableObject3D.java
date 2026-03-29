@@ -34,7 +34,12 @@ public abstract class DrawableObject3D extends Object3D {
     }
 
     final void setTransparencyInternal(float transparency) {
-        this.transparency = java.lang.Math.max(0f, java.lang.Math.min(1f, transparency));
+        float normalized = transparency;
+        if (normalized > 1f) {
+            // Handset content commonly drives UI 3D fades with 0..100 percentage values.
+            normalized /= 100f;
+        }
+        this.transparency = java.lang.Math.max(0f, java.lang.Math.min(1f, normalized));
     }
 
     boolean perspectiveCorrectionEnabledValue() {
