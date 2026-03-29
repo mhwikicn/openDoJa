@@ -350,13 +350,17 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         DoJaRuntime runtime = DoJaRuntime.current();
         BufferedImage presentedFrame = null;
         boolean outermostUnlock = runtime == null || runtime.surfaceLock().getHoldCount() == 1;
+        boolean pacedPresentation = flush;
         if (flush) {
             presentedFrame = copyImage(surface.image());
         } else if (outermostUnlock && surface.hasRepaintHook()) {
             // Some games draw directly to Canvas.getGraphics() and finish the frame with unlock(false)
             // rather than unlock(true). Canvas surfaces still need to present at the end of that
             // outermost lock scope, while offscreen Image surfaces must remain offscreen.
+            // These loops already own their pacing, so present without the sync-unlock delay that
+            // explicit unlock(true)/flush() paths use.
             presentedFrame = copyImage(surface.image());
+            pacedPresentation = false;
         }
         if (runtime != null) {
             runtime.surfaceLock().unlock();
@@ -365,7 +369,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             surface.endDepthFrame();
         }
         if (presentedFrame != null) {
-            surface.flush(presentedFrame);
+            surface.flush(presentedFrame, pacedPresentation);
         }
     }
 

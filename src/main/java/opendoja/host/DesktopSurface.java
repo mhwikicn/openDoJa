@@ -104,7 +104,11 @@ public final class DesktopSurface {
     }
 
     public void flush(BufferedImage presentedFrame) {
-        if (syncUnlockIntervalNanos > 0L && repaintHook != null) {
+        flush(presentedFrame, true);
+    }
+
+    public void flush(BufferedImage presentedFrame, boolean paced) {
+        if (paced && syncUnlockIntervalNanos > 0L && repaintHook != null) {
             long now = System.nanoTime();
             long elapsed = now - lastFlushNanos;
             if (lastFlushNanos != 0L && elapsed < syncUnlockIntervalNanos) {
