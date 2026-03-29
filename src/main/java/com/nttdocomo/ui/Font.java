@@ -418,6 +418,20 @@ public class Font {
         graphics.drawString(text, x, y);
     }
 
+    /**
+     * Draws text using this DoJa font from host-side integration code.
+     * This is a host helper and not part of the original DoJa API surface.
+     *
+     * @param graphics the destination graphics
+     * @param text the text to draw
+     * @param x the left position
+     * @param y the baseline position
+     * @param argbColor the text color
+     */
+    public final void drawHostString(Graphics2D graphics, String text, int x, int y, int argbColor) {
+        drawString(graphics, text, x, y, argbColor);
+    }
+
     static Object textAntialiasHint() {
         return TEXT_ANTIALIAS_HINT;
     }

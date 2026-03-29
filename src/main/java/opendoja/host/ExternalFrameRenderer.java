@@ -4,8 +4,6 @@ import com.nttdocomo.ui.Frame;
 
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -127,10 +125,8 @@ final class ExternalFrameRenderer {
             return;
         }
 
-        int fontSize = Math.max(9, softKeyArea.height - 6);
-        Font font = new Font(Font.MONOSPACED, Font.BOLD, fontSize);
-        g.setFont(font);
-        g.setColor(new Color(0x1F2229));
+        com.nttdocomo.ui.Font font = softKeyFontForHeight(softKeyArea.height);
+        int argbColor = 0xFF1F2229;
 
         for (int i = 0; i < SOFT_KEYS.length; i++) {
             Rectangle section = new Rectangle(softKeyArea);
@@ -138,26 +134,39 @@ final class ExternalFrameRenderer {
             if (label == null || label.isBlank()) {
                 continue;
             }
-            paintSoftKeyLabel(g, label, section, i);
+            paintSoftKeyLabel(g, font, argbColor, label, section, i);
         }
     }
 
-    private void paintSoftKeyLabel(Graphics2D g, String label, Rectangle section, int alignmentIndex) {
+    private void paintSoftKeyLabel(Graphics2D g, com.nttdocomo.ui.Font font, int argbColor, String label,
+                                   Rectangle section, int alignmentIndex) {
         Graphics2D textGraphics = (Graphics2D) g.create();
         try {
             textGraphics.clipRect(section.x, section.y, section.width, section.height);
-            FontMetrics metrics = textGraphics.getFontMetrics();
-            int textWidth = metrics.stringWidth(label);
-            int textY = section.y + ((section.height - metrics.getHeight()) / 2) + metrics.getAscent();
+            int textWidth = font.stringWidth(label);
+            int textY = section.y + ((section.height - font.getHeight()) / 2) + font.getAscent();
             int horizontalPadding = Math.max(4, section.height / 4);
             int textX = switch (alignmentIndex) {
                 case 0 -> section.x + horizontalPadding;
                 default -> section.x + Math.max(horizontalPadding, section.width - textWidth - horizontalPadding);
             };
-            textGraphics.drawString(label, textX, textY);
+            font.drawHostString(textGraphics, label, textX, textY, argbColor);
         } finally {
             textGraphics.dispose();
         }
+    }
+
+    private com.nttdocomo.ui.Font softKeyFontForHeight(int availableHeight) {
+        int[] supportedSizes = com.nttdocomo.ui.Font.getSupportedFontSizes();
+        int target = java.lang.Math.max(1, availableHeight - 2);
+        int selected = supportedSizes[0];
+        for (int size : supportedSizes) {
+            selected = size;
+            if (size >= target) {
+                break;
+            }
+        }
+        return com.nttdocomo.ui.Font.getFont(com.nttdocomo.ui.Font.FACE_SYSTEM | com.nttdocomo.ui.Font.STYLE_PLAIN, selected);
     }
 
     private void paintOverlays(Graphics2D g, ExternalFrameLayout layout, Frame frame, BufferedImage drawImage) {

@@ -636,10 +636,7 @@ public final class DoJaRuntime {
     }
 
     private static int resolveHostScale(LaunchConfig config) {
-        if (config == null) {
-            return 1;
-        }
-        String raw = config.parameters().get("opendoja.hostScale");
+        String raw = System.getProperty("opendoja.hostScale");
         if (raw == null || raw.isBlank()) {
             return 1;
         }
