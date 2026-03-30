@@ -604,7 +604,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 delegate.scale(1, -1);
                 delegate.translate(-(originX + dx), -(originY + dy));
             }
-            case FLIP_ROTATE, FLIP_ROTATE_RIGHT -> {
+            case FLIP_ROTATE -> {
+                delegate.rotate(Math.toRadians(180), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+            }
+            case FLIP_ROTATE_RIGHT -> {
                 delegate.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
             }
             case FLIP_ROTATE_LEFT -> {
