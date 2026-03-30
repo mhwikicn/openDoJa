@@ -10,7 +10,7 @@ import javax.swing.UIManager;
 import java.nio.file.Path;
 
 public final class OpenDoJaLauncher {
-    static final String APP_NAME = "OpenDoJaLauncher";
+    static final String APP_NAME = "openDoJa Launcher";
     static final String VERSION = "0.1.0";
     private static final String RUN_JAM_FLAG = "--run-jam";
     private static final String RUN_JAM_INTERNAL_FLAG = "--run-jam-internal";
@@ -33,7 +33,7 @@ public final class OpenDoJaLauncher {
             configureLookAndFeel();
             SwingUtilities.invokeLater(() -> new OpenDoJaLauncherFrame(
                     new JamLaunchService(),
-                    new LauncherToolsController()).setVisible(true));
+                    new LauncherSettingsController()).setVisible(true));
             return;
         }
         if (args.length == 1 && looksLikeJamPath(args[0])) {

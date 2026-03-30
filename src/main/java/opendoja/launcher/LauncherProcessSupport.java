@@ -6,12 +6,20 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+
+import opendoja.host.OpenDoJaLaunchArgs;
 
 final class LauncherProcessSupport {
     Process startInBackground(GameLaunchSelection selection) throws IOException {
-        ProcessBuilder processBuilder = new ProcessBuilder(buildLaunchCommand(selection));
+        return startInBackground(selection, null);
+    }
+
+    Process startInBackground(GameLaunchSelection selection, LauncherSettings settings) throws IOException {
+        ProcessBuilder processBuilder = new ProcessBuilder(buildLaunchCommand(selection, settings));
         if (selection.jamPath().getParent() != null) {
             processBuilder.directory(selection.jamPath().getParent().toFile());
         }
@@ -25,9 +33,14 @@ final class LauncherProcessSupport {
     }
 
     List<String> buildLaunchCommand(GameLaunchSelection selection) throws IOException {
+        return buildLaunchCommand(selection, null);
+    }
+
+    List<String> buildLaunchCommand(GameLaunchSelection selection, LauncherSettings settings) throws IOException {
         List<String> command = new ArrayList<>();
         command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
-        appendForwardedProperties(command, System.getProperties());
+        Set<String> overriddenProperties = appendForwardedProperties(command, System.getProperties());
+        appendLauncherSettings(command, settings, overriddenProperties);
         command.add("-cp");
         command.add(resolveLauncherArtifact() + File.pathSeparator + selection.gameJarPath());
         command.add(OpenDoJaLauncher.class.getName());
@@ -36,12 +49,33 @@ final class LauncherProcessSupport {
         return command;
     }
 
-    private void appendForwardedProperties(List<String> command, Properties properties) {
+    private Set<String> appendForwardedProperties(List<String> command, Properties properties) {
+        Set<String> forwarded = new HashSet<>();
         for (String name : properties.stringPropertyNames()) {
             if (name.startsWith("opendoja.") || name.equals("java.awt.headless") || name.equals("sun.java2d.uiScale")) {
                 command.add("-D" + name + "=" + properties.getProperty(name));
+                forwarded.add(name);
             }
         }
+        return forwarded;
+    }
+
+    private void appendLauncherSettings(List<String> command, LauncherSettings settings, Set<String> overriddenProperties) {
+        if (settings == null) {
+            return;
+        }
+        appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.HOST_SCALE, Integer.toString(settings.hostScale()));
+        appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.MLD_SYNTH, settings.synthId());
+    }
+
+    private void appendProperty(List<String> command, Set<String> overriddenProperties, String name, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        if (overriddenProperties != null) {
+            overriddenProperties.add(name);
+        }
+        command.add("-D" + name + "=" + value);
     }
 
     private Path resolveLauncherArtifact() throws IOException {
