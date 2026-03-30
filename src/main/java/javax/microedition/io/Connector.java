@@ -2,7 +2,6 @@ package javax.microedition.io;
 
 import opendoja.host.DesktopHttpConnection;
 import opendoja.host.DoJaRuntime;
-import opendoja.host.ScratchpadStreams;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -10,7 +9,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
-import java.nio.file.Path;
 import java.util.Locale;
 
 public class Connector {
@@ -71,7 +69,7 @@ public class Connector {
                 throw new IOException("No active DoJa runtime for scratchpad URI: " + name);
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
-            return ScratchpadStreams.openInput(runtime.scratchpadFile(location.index()), location.position(), location.length());
+            return runtime.openScratchpadInput(location.index(), location.position(), location.length());
         }
         if (lower.startsWith("http://") || lower.startsWith("https://")) {
             return ((DesktopHttpConnection) open(name, READ, false)).openInputStream();
@@ -87,7 +85,7 @@ public class Connector {
                 throw new IOException("No active DoJa runtime for scratchpad URI: " + name);
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
-            return ScratchpadStreams.openOutput(runtime.scratchpadFile(location.index()), location.position(), location.length());
+            return runtime.openScratchpadOutput(location.index(), location.position(), location.length());
         }
         if (lower.startsWith("http://") || lower.startsWith("https://")) {
             return ((DesktopHttpConnection) open(name, READ_WRITE, false)).openOutputStream();

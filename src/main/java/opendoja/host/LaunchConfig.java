@@ -21,6 +21,8 @@ public final class LaunchConfig {
     private final String sourceUrl;
     private final Map<String, String> parameters;
     private final Path scratchpadRoot;
+    private final Path scratchpadPackedFile;
+    private final int[] scratchpadSizes;
     private final String statusBarIconDevice;
     private final IAppliType iAppliType;
     private final boolean externalFrameEnabled;
@@ -36,6 +38,8 @@ public final class LaunchConfig {
         this.sourceUrl = builder.sourceUrl;
         this.parameters = Collections.unmodifiableMap(new HashMap<>(builder.parameters));
         this.scratchpadRoot = builder.scratchpadRoot;
+        this.scratchpadPackedFile = builder.scratchpadPackedFile;
+        this.scratchpadSizes = builder.scratchpadSizes == null ? new int[0] : builder.scratchpadSizes.clone();
         this.statusBarIconDevice = builder.statusBarIconDevice;
         this.iAppliType = builder.iAppliType;
         this.externalFrameEnabled = builder.externalFrameEnabled;
@@ -82,6 +86,14 @@ public final class LaunchConfig {
         return scratchpadRoot;
     }
 
+    public Path scratchpadPackedFile() {
+        return scratchpadPackedFile;
+    }
+
+    public int[] scratchpadSizes() {
+        return scratchpadSizes.clone();
+    }
+
     public String statusBarIconDevice() {
         return statusBarIconDevice;
     }
@@ -108,6 +120,8 @@ public final class LaunchConfig {
         private String sourceUrl = "resource:///";
         private final Map<String, String> parameters = new HashMap<>();
         private Path scratchpadRoot;
+        private Path scratchpadPackedFile;
+        private int[] scratchpadSizes = new int[0];
         private String statusBarIconDevice = resolveDefaultStatusBarIconDevice();
         private IAppliType iAppliType = IAppliType.I_APPLI;
         private boolean externalFrameEnabled = true;
@@ -158,6 +172,16 @@ public final class LaunchConfig {
 
         public Builder scratchpadRoot(Path scratchpadRoot) {
             this.scratchpadRoot = scratchpadRoot;
+            return this;
+        }
+
+        public Builder scratchpadPackedFile(Path scratchpadPackedFile) {
+            this.scratchpadPackedFile = scratchpadPackedFile;
+            return this;
+        }
+
+        public Builder scratchpadSizes(int[] scratchpadSizes) {
+            this.scratchpadSizes = scratchpadSizes == null ? new int[0] : scratchpadSizes.clone();
             return this;
         }
 

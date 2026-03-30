@@ -23,9 +23,7 @@ public final class JamLauncher {
 
     public static LaunchConfig buildLaunchConfig(Path jamPath, boolean exitOnShutdown) throws IOException, ClassNotFoundException {
         Properties properties = loadJamProperties(jamPath);
-        LaunchConfig config = buildLaunchConfig(jamPath, properties, exitOnShutdown);
-        seedScratchpadIfAvailable(jamPath, config.scratchpadRoot(), parseScratchpadSizes(properties.getProperty("SPsize")));
-        return config;
+        return buildLaunchConfig(jamPath, properties, exitOnShutdown);
     }
 
     private static LaunchConfig buildLaunchConfig(Path jamPath, Properties properties, boolean exitOnShutdown)
@@ -40,11 +38,13 @@ public final class JamLauncher {
         }
         @SuppressWarnings("unchecked")
         Class<? extends IApplication> applicationClass = (Class<? extends IApplication>) rawClass;
-        Path scratchpadRoot = defaultScratchpadRoot(jamPath);
+        int[] scratchpadSizes = parseScratchpadSizes(properties.getProperty("SPsize"));
+        ResolvedScratchpad scratchpad = resolveScratchpad(jamPath);
         LaunchConfig.Builder builder = LaunchConfig.builder(applicationClass)
                 .title(properties.getProperty("AppName", applicationClass.getSimpleName()))
                 .sourceUrl(resolvePackageUrl(jamPath, properties.getProperty("PackageURL")))
-                .scratchpadRoot(scratchpadRoot)
+                .scratchpadPackedFile(scratchpad.path())
+                .scratchpadSizes(scratchpadSizes)
                 .iAppliType(IAppliType.fromJamProperties(properties))
                 .exitOnShutdown(exitOnShutdown);
         String drawArea = properties.getProperty("DrawArea");
@@ -63,6 +63,11 @@ public final class JamLauncher {
         }
         for (String name : properties.stringPropertyNames()) {
             builder.parameter(name, properties.getProperty(name));
+        }
+        if (!scratchpad.found()) {
+            OpenDoJaLog.warn(JamLauncher.class,
+                    () -> "No .sp file found for " + jamPath + " next to the JAM or in ../sp; "
+                            + "continuing and using " + scratchpad.path() + " if the game creates one at runtime");
         }
         return builder.build();
     }
@@ -136,35 +141,18 @@ public final class JamLauncher {
         return properties;
     }
 
-    private static Path defaultScratchpadRoot(Path jamPath) {
+    private static ResolvedScratchpad resolveScratchpad(Path jamPath) {
         String baseName = stripExtension(jamPath.getFileName().toString());
-        String hash = Integer.toHexString(jamPath.toAbsolutePath().normalize().toString().hashCode());
-        return Path.of(".opendoja", sanitize(baseName) + "-" + hash);
-    }
-
-    private static void seedScratchpadIfAvailable(Path jamPath, Path scratchpadRoot, int[] scratchpadSizes) throws IOException {
-        Path seedFile = locateScratchpadSeed(jamPath);
-        if (seedFile == null) {
-            return;
+        Path sibling = jamPath.resolveSibling(baseName + ".sp").normalize();
+        if (Files.exists(sibling)) {
+            return new ResolvedScratchpad(sibling, true);
         }
-        ScratchpadSeed.seedIfNeeded(scratchpadRoot, seedFile, scratchpadSizes);
-    }
-
-    private static Path locateScratchpadSeed(Path jamPath) {
-        String baseName = stripExtension(jamPath.getFileName().toString());
-        Path[] candidates = new Path[]{
-                jamPath.resolveSibling(baseName + ".sp"),
-                jamPath.getParent() == null ? null : jamPath.getParent().resolve("sp").resolve(baseName + ".sp"),
-                jamPath.getParent() == null ? null : jamPath.getParent().resolveSibling("sp").resolve(baseName + ".sp"),
-                jamPath.getParent() == null || jamPath.getParent().getParent() == null ? null
-                        : jamPath.getParent().getParent().resolve("sp").resolve(baseName + ".sp")
-        };
-        for (Path candidate : candidates) {
-            if (candidate != null && Files.exists(candidate)) {
-                return candidate;
-            }
+        Path fallback = jamPath.getParent() == null ? null
+                : jamPath.getParent().resolveSibling("sp").resolve(baseName + ".sp").normalize();
+        if (fallback != null && Files.exists(fallback)) {
+            return new ResolvedScratchpad(fallback, true);
         }
-        return null;
+        return new ResolvedScratchpad(sibling, false);
     }
 
     private static int[] parseScratchpadSizes(String raw) {
@@ -194,7 +182,6 @@ public final class JamLauncher {
         return lastDot < 0 ? name : name.substring(0, lastDot);
     }
 
-    private static String sanitize(String value) {
-        return value.replaceAll("[^A-Za-z0-9._-]+", "_");
+    private record ResolvedScratchpad(Path path, boolean found) {
     }
 }

@@ -24,6 +24,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -71,6 +72,7 @@ public final class DoJaRuntime {
     private final Map<Canvas, Long> lastCanvasTimerEventNanos = Collections.synchronizedMap(new WeakHashMap<>());
     private final HostPanel hostPanel;
     private final ExternalFrameRenderer externalFrameRenderer;
+    private final ScratchpadStorage scratchpadStorage;
     private final int hostScale;
     private volatile IApplication application;
     private JFrame frameWindow;
@@ -89,6 +91,10 @@ public final class DoJaRuntime {
                 resolveExternalFrameEnabled(config),
                 config.statusBarIconDevice(),
                 config.iAppliType());
+        this.scratchpadStorage = new ScratchpadStorage(
+                config.scratchpadRoot(),
+                config.scratchpadPackedFile(),
+                config.scratchpadSizes());
         this.hostPanel = new HostPanel(this);
     }
 
@@ -110,7 +116,7 @@ public final class DoJaRuntime {
 
     public static DoJaRuntime bootstrap(LaunchConfig config) {
         DoJaRuntime runtime = new DoJaRuntime(config);
-        runtime.createScratchpadRoot();
+        runtime.prepareScratchpadStorage();
         runtime.createWindowIfPossible();
         current = runtime;
         runtime.applyLaunchSystemProperties();
@@ -349,12 +355,20 @@ public final class DoJaRuntime {
         return config.scratchpadRoot();
     }
 
+    public Path scratchpadPackedFile() {
+        return config.scratchpadPackedFile();
+    }
+
     public IAppliType iAppliType() {
         return config.iAppliType();
     }
 
-    public Path scratchpadFile(int index) {
-        return scratchpadRoot().resolve("sp-" + index + ".bin");
+    public InputStream openScratchpadInput(int index, long position, long length) throws IOException {
+        return scratchpadStorage.openInput(index, position, length);
+    }
+
+    public OutputStream openScratchpadOutput(int index, long position, long length) throws IOException {
+        return scratchpadStorage.openOutput(index, position, length);
     }
 
     public int keypadState() {
@@ -604,10 +618,14 @@ public final class DoJaRuntime {
         }
     }
 
-    private void createScratchpadRoot() {
+    private void prepareScratchpadStorage() {
         try {
-            Files.createDirectories(scratchpadRoot());
+            scratchpadStorage.initialize();
         } catch (IOException e) {
+            Path packedFile = scratchpadPackedFile();
+            if (packedFile != null) {
+                throw new IllegalStateException("Failed to prepare packed scratchpad file " + packedFile, e);
+            }
             throw new IllegalStateException("Failed to create scratchpad root " + scratchpadRoot(), e);
         }
     }
