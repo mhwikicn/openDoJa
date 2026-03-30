@@ -53,16 +53,16 @@ public class Primitive extends DrawableObject3D {
         this.normalArray = switch (normalMode) {
             case NORMAL_PER_FACE -> new int[primitiveCount * 3];
             case NORMAL_PER_VERTEX -> new int[vertexCount * 3];
-            default -> new int[0];
+            default -> null;
         };
         int colorMode = primitiveParam & 0x0C00;
         this.colorArray = switch (colorMode) {
             case COLOR_PER_PRIMITIVE, COLOR_PER_FACE -> new int[primitiveCount];
-            default -> new int[0];
+            default -> null;
         };
-        this.textureCoordArray = (primitiveParam & 0x3000) == TEXTURE_COORD_PER_VERTEX ? new int[vertexCount * 2] : new int[0];
+        this.textureCoordArray = (primitiveParam & 0x3000) == TEXTURE_COORD_PER_VERTEX ? new int[vertexCount * 2] : null;
         int pointSpriteMode = primitiveParam & 0x3000;
-        this.pointSpriteArray = primitiveType == PRIMITIVE_POINT_SPRITES && pointSpriteMode != 0 ? new int[primitiveCount * 2] : new int[0];
+        this.pointSpriteArray = primitiveType == PRIMITIVE_POINT_SPRITES && pointSpriteMode != 0 ? new int[primitiveCount * 2] : null;
     }
 
     public int getPrimitiveType() {
