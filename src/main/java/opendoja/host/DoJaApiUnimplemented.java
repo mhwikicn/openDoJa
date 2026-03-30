@@ -23,6 +23,6 @@ public final class DoJaApiUnimplemented {
         if (reason != null && !reason.isBlank()) {
             message.append(" - ").append(reason);
         }
-        System.err.println(message);
+        OpenDoJaLog.warn(DoJaApiUnimplemented.class, message.toString());
     }
 }

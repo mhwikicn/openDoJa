@@ -15,12 +15,30 @@ Large reverse-engineering inputs and generated working notes are intentionally k
 ## Build
 
 ```bash
-./scripts/build.sh
+mvn -q -DskipTests package
 ```
 
 ## Run
 
-Launch a DoJa application through the desktop host:
+Open the desktop launcher UI:
+
+```bash
+java -jar target/opendoja-0.1.0-SNAPSHOT.jar
+```
+
+Launch a specific JAM directly through the packaged launcher:
+
+```bash
+java -jar target/opendoja-0.1.0-SNAPSHOT.jar --run-jam <game.jam>
+```
+
+Launch a JAM headless through the packaged launcher by passing the JAM path directly:
+
+```bash
+java -Djava.awt.headless=true -jar target/opendoja-0.1.0-SNAPSHOT.jar <game.jam>
+```
+
+For local development without packaging, the original CLI host path still works:
 
 ```bash
 java -cp out/classes:<game-jar> opendoja.host.JamLauncher <game.jam>
