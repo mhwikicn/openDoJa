@@ -2,16 +2,6 @@
 
 `openDoJa` is a desktop-focused clean-room reimplementation of the DoJa 5.1 runtime and related APIs, aimed at running i-appli Java games on modern computers.
 
-## Status
-
-The repository currently contains:
-
-- the Java compatibility/runtime source under `src/`
-- helper scripts under `scripts/`
-- Maven metadata in `pom.xml`
-
-Large reverse-engineering inputs and generated working notes are intentionally kept out of git.
-
 ## Build
 
 ```bash
