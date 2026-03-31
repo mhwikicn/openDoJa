@@ -1,6 +1,7 @@
 package com.nttdocomo.ui;
 
 import com.nttdocomo.lang.XString;
+import com.nttdocomo.opt.ui.j3d.PrimitiveArray;
 import opendoja.host.DesktopSurface;
 import opendoja.g3d.MascotFigure;
 import opendoja.g3d.Software3DContext;
@@ -23,6 +24,17 @@ import java.util.Arrays;
 public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.nttdocomo.opt.ui.j3d.Graphics3D {
     private static final boolean TRACE_FAILURES = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.TRACE_FAILURES);
     private static final boolean TRACE_3D_CALLS = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.DEBUG3D_CALLS);
+    private static final int LEGACY_OPT_COMMAND_LIST_VERSION_1 = 1;
+    private static final int OPT_COMMAND_PREFIX_MASK = 0xFF00_0000;
+    private static final int OPT_COMMAND_INLINE_VALUE_MASK = 0x00FF_FFFF;
+    private static final int OPT_COMMAND_RENDER_COUNT_MASK = 0x00FF_0000;
+    private static final int OPT_COMMAND_ATTR_MASK =
+            com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_LIGHT
+                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_SPHERE_MAP
+                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_COLOR_KEY
+                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_HALF
+                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_ADD
+                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_SUB;
     public static final int BLACK = 0;
     public static final int BLUE = 1;
     public static final int LIME = 2;
@@ -1030,14 +1042,139 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (commands == null) {
             throw new NullPointerException("commands");
         }
-        for (int i = 0; i < commands.length; i++) {
+        if (commands.length == 0 || !isSupportedOptCommandListVersion(commands[0])) {
+            throw new IllegalArgumentException("Unsupported command list version: "
+                    + (commands.length == 0 ? "<empty>" : Integer.toString(commands[0])));
+        }
+        for (int i = 1; i < commands.length; ) {
             int command = commands[i];
             if (command == com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_END) {
                 return;
             }
-            if (command == com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_FLUSH) {
-                flush();
+            i++;
+            switch (command & OPT_COMMAND_PREFIX_MASK) {
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_NOP -> i = skipOptCommandOperands(commands, i, command & OPT_COMMAND_INLINE_VALUE_MASK);
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_FLUSH -> flush();
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_ATTRIBUTE -> applyOptCommandAttributes(command & OPT_COMMAND_INLINE_VALUE_MASK);
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_CLIP_RECT -> {
+                    ensureOptCommandOperands(commands, i, 4, "COMMAND_CLIP_RECT");
+                    int left = commands[i++];
+                    int top = commands[i++];
+                    int right = commands[i++];
+                    int bottom = commands[i++];
+                    setClipRect3D(left, top, java.lang.Math.max(0, right - left), java.lang.Math.max(0, bottom - top));
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_CENTER -> {
+                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_CENTER");
+                    setScreenCenter(commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_TEXTURE -> setPrimitiveTexture(command & OPT_COMMAND_INLINE_VALUE_MASK);
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_VIEW_TRANS -> setViewTrans(command & OPT_COMMAND_INLINE_VALUE_MASK);
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_SCALE -> {
+                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_SCALE");
+                    setScreenScale(commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_VIEW -> {
+                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_VIEW");
+                    setScreenView(commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_PERSPECTIVE1 -> {
+                    ensureOptCommandOperands(commands, i, 3, "COMMAND_PERSPECTIVE1");
+                    setPerspective(commands[i++], commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_PERSPECTIVE2 -> {
+                    ensureOptCommandOperands(commands, i, 4, "COMMAND_PERSPECTIVE2");
+                    setPerspective(commands[i++], commands[i++], commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_AMBIENT_LIGHT -> {
+                    ensureOptCommandOperands(commands, i, 1, "COMMAND_AMBIENT_LIGHT");
+                    setAmbientLight(commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_DIRECTION_LIGHT -> {
+                    ensureOptCommandOperands(commands, i, 4, "COMMAND_DIRECTION_LIGHT");
+                    setDirectionLight(new com.nttdocomo.opt.ui.j3d.Vector3D(commands[i++], commands[i++], commands[i++]), commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_TOON_PARAM -> {
+                    ensureOptCommandOperands(commands, i, 3, "COMMAND_TOON_PARAM");
+                    setToonParam(commands[i++], commands[i++], commands[i++]);
+                }
+                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINTS,
+                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_LINES,
+                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_TRIANGLES,
+                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_QUADS,
+                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINT_SPRITES -> i = renderOptCommandPrimitive(commands, i, command);
+                default -> throw new IllegalArgumentException("Unsupported opt command: " + command);
             }
+        }
+    }
+
+    private static boolean isSupportedOptCommandListVersion(int version) {
+        // Some older handset stacks write the v1 command-list header as a plain literal `1`
+        // instead of the later packed constant `0xfe000001`.
+        return version == com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_LIST_VERSION_1
+                || version == LEGACY_OPT_COMMAND_LIST_VERSION_1;
+    }
+
+    private int skipOptCommandOperands(int[] commands, int index, int count) {
+        ensureOptCommandOperands(commands, index, count, "COMMAND_NOP");
+        return index + count;
+    }
+
+    private void applyOptCommandAttributes(int attributes) {
+        threeD.enableOptLight((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_LIGHT) != 0);
+        threeD.enableOptSemiTransparent((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_SEMI_TRANSPARENT) != 0);
+    }
+
+    private int renderOptCommandPrimitive(int[] commands, int index, int command) {
+        int primitiveType = switch (command & OPT_COMMAND_PREFIX_MASK) {
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINTS -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINTS;
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_LINES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_LINES;
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_TRIANGLES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_TRIANGLES;
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_QUADS -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_QUADS;
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINT_SPRITES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES;
+            default -> throw new IllegalArgumentException("Unsupported primitive command: " + command);
+        };
+        int primitiveCount = (command & OPT_COMMAND_RENDER_COUNT_MASK) >>> 16;
+        if (primitiveCount <= 0) {
+            throw new IllegalArgumentException("Invalid primitive count: " + primitiveCount);
+        }
+        PrimitiveArray primitives = new PrimitiveArray(primitiveType, extractOptPrimitiveParam(command, primitiveType), primitiveCount);
+        // Command-list primitive payloads follow the PrimitiveArray storage order:
+        // vertices, normals, texture/point-sprite data, then colors.
+        index = copyOptCommandPayload(commands, index, primitives.getVertexArray(), "vertex");
+        index = copyOptCommandPayload(commands, index, primitives.getNormalArray(), "normal");
+        index = copyOptCommandPayload(commands, index, primitives.getTextureCoordArray(), "texture");
+        index = copyOptCommandPayload(commands, index, primitives.getPointSpriteArray(), "pointSprite");
+        index = copyOptCommandPayload(commands, index, primitives.getColorArray(), "color");
+        renderPrimitives(primitives, command & OPT_COMMAND_ATTR_MASK);
+        return index;
+    }
+
+    private static int extractOptPrimitiveParam(int command, int primitiveType) {
+        int sharedParam = command & (com.nttdocomo.opt.ui.j3d.Graphics3D.NORMAL_PER_FACE
+                | com.nttdocomo.opt.ui.j3d.Graphics3D.NORMAL_PER_VERTEX
+                | com.nttdocomo.opt.ui.j3d.Graphics3D.COLOR_PER_COMMAND
+                | com.nttdocomo.opt.ui.j3d.Graphics3D.COLOR_PER_FACE
+                | com.nttdocomo.opt.ui.j3d.Graphics3D.TEXTURE_COORD_PER_VERTEX);
+        if (primitiveType != com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES) {
+            return sharedParam;
+        }
+        return sharedParam | (command & (com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_PIXEL_SIZE
+                | com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_NO_PERSPECTIVE));
+    }
+
+    private static int copyOptCommandPayload(int[] commands, int index, int[] target, String label) {
+        if (target == null || target.length == 0) {
+            return index;
+        }
+        ensureOptCommandOperands(commands, index, target.length, label);
+        System.arraycopy(commands, index, target, 0, target.length);
+        return index + target.length;
+    }
+
+    private static void ensureOptCommandOperands(int[] commands, int index, int count, String label) {
+        if (commands.length - index < count) {
+            throw new IllegalArgumentException("Truncated " + label + " payload");
         }
     }
 
