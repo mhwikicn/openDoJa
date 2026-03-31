@@ -3,7 +3,6 @@ package opendoja.host;
 import com.nttdocomo.ui.IApplication;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,8 +134,8 @@ public final class JamLauncher {
 
     private static Properties loadJamProperties(Path jamPath) throws IOException {
         Properties properties = new Properties();
-        try (InputStream in = Files.newInputStream(jamPath)) {
-            properties.load(in);
+        try (java.io.Reader reader = Files.newBufferedReader(jamPath, DoJaEncoding.DEFAULT_CHARSET)) {
+            properties.load(reader);
         }
         return properties;
     }
