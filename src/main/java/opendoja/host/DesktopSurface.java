@@ -7,6 +7,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 
 public final class DesktopSurface {
+    private static final long PRESENT_SYNC_INTERVAL_NANOS = 16_000_000L;
     private BufferedImage image;
     private int backgroundColor = 0xFF000000;
     private Consumer<BufferedImage> repaintHook;
@@ -96,6 +97,12 @@ public final class DesktopSurface {
     }
 
     public void flush(BufferedImage presentedFrame, boolean paced) {
+        if (paced) {
+            // The official emulator exposes a separate graphics sync interval of `16000us`.
+            // Keep the paced direct-present path on that cadence, while callers that already
+            // performed an explicit sync wait pass `paced=false` to avoid double throttling.
+            waitForRenderSync(PRESENT_SYNC_INTERVAL_NANOS);
+        }
         present(presentedFrame);
     }
 

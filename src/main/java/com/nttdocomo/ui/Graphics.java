@@ -600,7 +600,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             surface.endDepthFrame();
             return;
         }
-        surface.flush(copyImage(surface.image()));
+        surface.flush(copyImage(surface.image()), false);
     }
 
     private void flushPending3DPasses() {
