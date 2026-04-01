@@ -14,9 +14,10 @@ import java.util.Map;
 /**
  * Bitmap font backend loaded from extracted handset glyph dumps.
  *
- * <p>The bundled dump was extracted from a 900i-series phone and is treated as the authoritative
- * source for this renderer. Thanks to GuyPerfect for extracting and preserving the handset font
- * data used here.</p>
+ * <p>The bundled dump was extracted from a n900i-series phone and is treated as the authoritative
+ * source for this renderer. Thanks to Unabandonware (LNRC) for dumping the NOR, kagekiyo for
+ * extracting the fonts (https://github.com/ZiplineGun/k/blob/main/extract_n900i_font.py) and
+ * GuyPerfect for the initial version of this file.</p>
  *
  * <p>Each size has a {@code code-points.dat} table plus one raw glyph-bitmap file. The code-point
  * table is a list of 16-bit little-endian Unicode values in the same order as the glyphs appear in
