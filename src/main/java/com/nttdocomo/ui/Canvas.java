@@ -11,8 +11,6 @@ import javax.swing.JOptionPane;
  * scrolling function.
  */
 public abstract class Canvas extends Frame {
-    private static final long DIRECT_SYNC_UNLOCK_INTERVAL_NANOS =
-            java.lang.Math.max(0L, opendoja.host.OpenDoJaLaunchArgs.getLong(opendoja.host.OpenDoJaLaunchArgs.SYNC_UNLOCK_INTERVAL_MS)) * 1_000_000L;
     /**
      * Indicates that IME input has been committed (=0).
      * This value is passed as the {@code type} argument of
@@ -27,7 +25,6 @@ public abstract class Canvas extends Frame {
     public static final int IME_CANCELED = 1;
 
     private DesktopSurface surface;
-    private volatile boolean directGraphicsMode;
 
     /**
      * Creates a canvas object.
@@ -41,23 +38,11 @@ public abstract class Canvas extends Frame {
      * @return the graphics object for the canvas
      */
     public Graphics getGraphics() {
-        DoJaRuntime runtime = DoJaRuntime.current();
-        // Some titles cache a Canvas Graphics instance during construction and still rely on
-        // repaint-managed paint(Graphics) once the Canvas becomes current. Only mark direct mode
-        // when the Canvas is already the active frame and the app is intentionally driving draws
-        // through getGraphics() at runtime.
-        if (runtime != null && runtime.getCurrentFrame() == this) {
-            directGraphicsMode = true;
-        }
         return createGraphics();
     }
 
     Graphics runtimeGraphics() {
         return createGraphics();
-    }
-
-    boolean directGraphicsMode() {
-        return directGraphicsMode;
     }
 
     private Graphics createGraphics() {
@@ -69,11 +54,6 @@ public abstract class Canvas extends Frame {
                 runtime.notifySurfaceFlush(this, frame);
             }
         });
-        // The original emulator/runtime exposes a sync-unlock interval on the frame path. Direct
-        // Canvas loops like Nose Hair rely on unlock(true) pacing their gameplay loop instead of
-        // sleeping explicitly. Those loops advance in-game time by 9 centiseconds per frame, so a
-        // 90 ms default matches the bundled sample behavior and the native sync-unlock concept.
-        surface.setSyncUnlockIntervalNanos(directGraphicsMode ? DIRECT_SYNC_UNLOCK_INTERVAL_NANOS : 0L);
         return Graphics.createPlatformGraphics(surface);
     }
 

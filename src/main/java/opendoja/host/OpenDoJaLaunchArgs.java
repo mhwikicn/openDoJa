@@ -194,8 +194,6 @@ public final class OpenDoJaLaunchArgs {
     public static final String RADIOTUNER_SEEK_DELAY_MS = "opendoja.radiotuner.seekDelayMs";
     /** PCM chunk size for sampled audio playback. */
     public static final String SAMPLED_CHUNK_BYTES = "opendoja.sampledChunkBytes";
-    /** Divisor used to map short-timer intervals. */
-    public static final String SHORT_TIMER_INTERVAL_DIVISOR = "opendoja.shortTimerIntervalDivisor";
     /** Minimum short-timer interval in ms. */
     public static final String SHORT_TIMER_MIN_TIME_INTERVAL = "opendoja.shortTimerMinTimeInterval";
     /** Reported short-timer resolution in ms. */
@@ -228,8 +226,6 @@ public final class OpenDoJaLaunchArgs {
     public static final String SUB_DISPLAY_HEIGHT = "opendoja.subDisplayHeight";
     /** Reported sub-display width in pixels. */
     public static final String SUB_DISPLAY_WIDTH = "opendoja.subDisplayWidth";
-    /** Minimum sync-unlock interval in ms. */
-    public static final String SYNC_UNLOCK_INTERVAL_MS = "opendoja.syncUnlockIntervalMs";
     /** Java text antialias hint name. */
     public static final String TEXT_ANTIALIAS = "opendoja.textAntialias";
     /** Logs audio failures before rethrowing. */
@@ -330,7 +326,6 @@ public final class OpenDoJaLaunchArgs {
             RADIOTUNER_FM_STATIONS,
             RADIOTUNER_SEEK_DELAY_MS,
             SAMPLED_CHUNK_BYTES,
-            SHORT_TIMER_INTERVAL_DIVISOR,
             SHORT_TIMER_MIN_TIME_INTERVAL,
             SHORT_TIMER_RESOLUTION,
             SPEECH_CODECS,
@@ -347,7 +342,6 @@ public final class OpenDoJaLaunchArgs {
             STATUS_BAR_ICON_DEVICE,
             SUB_DISPLAY_HEIGHT,
             SUB_DISPLAY_WIDTH,
-            SYNC_UNLOCK_INTERVAL_MS,
             TEXT_ANTIALIAS,
             TRACE_AUDIO_FAILURES,
             TRACE_EVENTS,
@@ -541,9 +535,8 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(RADIOTUNER_FM_STATIONS, () -> "");
         defaults.put(RADIOTUNER_SEEK_DELAY_MS, () -> "0");
         defaults.put(SAMPLED_CHUNK_BYTES, () -> "4096");
-        defaults.put(SHORT_TIMER_INTERVAL_DIVISOR, () -> "10");
-        defaults.put(SHORT_TIMER_MIN_TIME_INTERVAL, () -> "1");
-        defaults.put(SHORT_TIMER_RESOLUTION, () -> "1");
+        defaults.put(SHORT_TIMER_MIN_TIME_INTERVAL, () -> "10");
+        defaults.put(SHORT_TIMER_RESOLUTION, () -> "10");
         defaults.put(SPEECH_CODECS, () -> "audio/amr");
         defaults.put(SPEECH_FEATURE_CHUNKS, () -> "01020304;05060708;090a0b0c");
         defaults.put(SPEECH_FEATURE_INTERVAL, () -> "200");
@@ -558,7 +551,6 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(STATUS_BAR_ICON_DEVICE, () -> LaunchConfig.DEFAULT_STATUS_BAR_ICON_DEVICE);
         defaults.put(SUB_DISPLAY_HEIGHT, () -> "0");
         defaults.put(SUB_DISPLAY_WIDTH, () -> "0");
-        defaults.put(SYNC_UNLOCK_INTERVAL_MS, () -> "90");
         defaults.put(TEXT_ANTIALIAS, () -> "gasp");
         defaults.put(TRACE_AUDIO_FAILURES, () -> "false");
         defaults.put(TRACE_EVENTS, () -> "false");

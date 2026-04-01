@@ -30,12 +30,10 @@ import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -69,7 +67,6 @@ public final class DoJaRuntime {
     });
     private final AtomicBoolean renderQueued = new AtomicBoolean();
     private final Set<AutoCloseable> shutdownResources = ConcurrentHashMap.newKeySet();
-    private final Map<Canvas, Long> lastCanvasTimerEventNanos = Collections.synchronizedMap(new WeakHashMap<>());
     private final HostPanel hostPanel;
     private final ExternalFrameRenderer externalFrameRenderer;
     private final ScratchpadStorage scratchpadStorage;
@@ -260,11 +257,7 @@ public final class DoJaRuntime {
                 presentedFrame = snapshotCanvasImage(canvas);
             }
             presentedCanvas = canvas;
-            if (usesDirectGraphicsMode(canvas)) {
-                repaintWindow();
-            } else {
-                requestRender(canvas);
-            }
+            requestRender(canvas);
         } else {
             presentedCanvas = null;
             presentedFrame = null;
@@ -277,14 +270,6 @@ public final class DoJaRuntime {
     }
 
     public void requestRender(Canvas canvas) {
-        if (usesDirectGraphicsMode(canvas)) {
-            if (canvas == currentFrame && (presentedCanvas != canvas || presentedFrame == null)) {
-                presentedCanvas = canvas;
-                presentedFrame = snapshotCanvasImage(canvas);
-            }
-            repaintWindow();
-            return;
-        }
         Runnable paintTask = () -> {
             try {
                 synchronized (canvas) {
@@ -387,7 +372,6 @@ public final class DoJaRuntime {
         if (shutdown.get()) {
             return;
         }
-        lastCanvasTimerEventNanos.put(canvas, System.nanoTime());
         if (TRACE_EVENTS) {
             OpenDoJaLog.debug(DoJaRuntime.class, () -> "timer event canvas=" + canvas.getClass().getName() + " param=" + param);
         }
@@ -416,9 +400,6 @@ public final class DoJaRuntime {
                 OpenDoJaLog.debug(DoJaRuntime.class, () -> "key event type=" + eventType + " key=" + dojaKey + " canvas=" + canvas.getClass().getName());
             }
             canvas.processEvent(eventType, dojaKey);
-            if (eventType == Display.KEY_PRESSED_EVENT) {
-                wakeDirectCanvasSync(canvas);
-            }
             repaintWindow();
         };
         if (SwingUtilities.isEventDispatchThread()) {
@@ -474,25 +455,6 @@ public final class DoJaRuntime {
         }
     }
 
-    private void wakeDirectCanvasSync(Canvas canvas) {
-        if (!usesDirectGraphicsMode(canvas)) {
-            return;
-        }
-        Object surface = invokeCanvasMethod(canvas, "surface", new Class<?>[0]);
-        if (surface instanceof DesktopSurface desktopSurface) {
-            long syncIntervalNanos = desktopSurface.syncUnlockIntervalNanos();
-            if (syncIntervalNanos > 0L && hasRecentCanvasTimerEvent(canvas, syncIntervalNanos)) {
-                return;
-            }
-            desktopSurface.wakeSyncUnlockWait();
-        }
-    }
-
-    private boolean hasRecentCanvasTimerEvent(Canvas canvas, long windowNanos) {
-        Long lastTimerNanos = lastCanvasTimerEventNanos.get(canvas);
-        return lastTimerNanos != null && System.nanoTime() - lastTimerNanos < windowNanos;
-    }
-
     private void ensureCanvasSurface(Canvas canvas) {
         invokeCanvasMethod(canvas, "ensureSurface", new Class<?>[]{int.class, int.class}, displayWidth(), displayHeight());
     }
@@ -519,11 +481,6 @@ public final class DoJaRuntime {
     private BufferedImage snapshotCanvasImage(Canvas canvas) {
         BufferedImage image = getCanvasImage(canvas);
         return copyCanvasImage(image);
-    }
-
-    private boolean usesDirectGraphicsMode(Canvas canvas) {
-        Object direct = invokeCanvasMethod(canvas, "directGraphicsMode", new Class<?>[0]);
-        return direct instanceof Boolean value && value;
     }
 
     private Graphics runtimeGraphics(Canvas canvas) {

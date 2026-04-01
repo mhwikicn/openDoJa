@@ -28,6 +28,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private static final int OPT_COMMAND_PREFIX_MASK = 0xFF00_0000;
     private static final int OPT_COMMAND_INLINE_VALUE_MASK = 0x00FF_FFFF;
     private static final int OPT_COMMAND_RENDER_COUNT_MASK = 0x00FF_0000;
+    private static final long OPT_RENDER_SYNC_INTERVAL_NANOS = 16_000_000L;
     private static final int OPT_COMMAND_ATTR_MASK =
             com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_LIGHT
                     | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_SPHERE_MAP
@@ -63,6 +64,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private final DesktopSurface surface;
     private final Graphics2D delegate;
     private final Software3DContext threeD = new Software3DContext();
+    private boolean pendingOptRenderedContent;
     private int originX;
     private int originY;
     private int color = getColorOfName(BLACK);
@@ -567,20 +569,29 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void flushSurfacePresentation() {
-        if (!surface.immediatePresentationEnabled()) {
+        if (!surface.hasRepaintHook()) {
             return;
         }
         DoJaRuntime runtime = DoJaRuntime.current();
         if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
             return;
         }
-        surface.presentImmediately(copyImage(surface.image()));
+        surface.flush(copyImage(surface.image()), false);
     }
 
     private void flushSurfaceFrame() {
         // `Graphics3D.flush()` is the pass boundary for staged opt draws inside one locked frame.
         // Finish any deferred blended primitive batches before ending the shared depth frame.
         flushPending3DPasses();
+        if (pendingOptRenderedContent) {
+            pendingOptRenderedContent = false;
+            // `Graphics3D.flush()` applies the pending render result, but some titles also issue
+            // state-only flushes between draw submissions. Only pace flushes that actually follow
+            // 3D rendering work. The official emulator exposes a hidden Render3D/frameDuration
+            // path, and the only recovered native sync interval is `16000us`, so keep rendered
+            // opt passes on that cadence only.
+            surface.waitForRenderSync(OPT_RENDER_SYNC_INTERVAL_NANOS);
+        }
         DoJaRuntime runtime = DoJaRuntime.current();
         if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
             // opt.ui.j3d titles can issue multiple flushes inside one locked Canvas frame to
@@ -599,6 +610,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private void prepare3DDepthFrame() {
         // Games can submit 3D assets through separate 3D calls inside one
         // lock/unlock frame. They must share one z-buffer or later props ignore ramp depth.
+        pendingOptRenderedContent = true;
         threeD.setFrameDepthBuffer(surface.depthBufferForFrame());
     }
 

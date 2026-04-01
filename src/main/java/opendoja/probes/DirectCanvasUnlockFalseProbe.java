@@ -11,8 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Verifies that a direct Canvas loop which ends frames with unlock(false) keeps
- * its own pacing instead of inheriting the sync-unlock delay used by explicit
- * unlock(true) / flush() frame boundaries.
+ * its own pacing instead of stalling on presentation.
  */
 public final class DirectCanvasUnlockFalseProbe {
     private DirectCanvasUnlockFalseProbe() {
@@ -20,7 +19,6 @@ public final class DirectCanvasUnlockFalseProbe {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("java.awt.headless", "true");
-        System.setProperty(opendoja.host.OpenDoJaLaunchArgs.SYNC_UNLOCK_INTERVAL_MS, "120");
         ProbeApp app = (ProbeApp) DesktopLauncher.launch(ProbeApp.class);
         try {
             app.canvas.awaitFrameCount(8);

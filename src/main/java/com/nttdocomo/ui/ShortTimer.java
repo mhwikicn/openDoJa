@@ -18,13 +18,6 @@ public final class ShortTimer implements TimeKeeper {
     private static final int RESOLUTION =
             java.lang.Math.max(1, opendoja.host.OpenDoJaLaunchArgs.getInt(opendoja.host.OpenDoJaLaunchArgs.SHORT_TIMER_RESOLUTION));
     private static final Map<Canvas, Map<Integer, ShortTimer>> REGISTRY = new WeakHashMap<>();
-    // Bundled DoJa titles schedule gameplay-step timers with values like 100, but those same
-    // titles only progress correctly when the desktop runtime treats the interval as handset timer
-    // units rather than literal Java milliseconds. A divisor of 10 matches the observed sample
-    // behavior and keeps this timer usable as a general game-step primitive.
-    private static final int DEFAULT_INTERVAL_DIVISOR = 10;
-    private static final int INTERVAL_DIVISOR = java.lang.Math.max(
-            1, opendoja.host.OpenDoJaLaunchArgs.getInt(opendoja.host.OpenDoJaLaunchArgs.SHORT_TIMER_INTERVAL_DIVISOR, DEFAULT_INTERVAL_DIVISOR));
     private final Canvas canvas;
     private final int timerId;
     private final int interval;
@@ -129,12 +122,11 @@ public final class ShortTimer implements TimeKeeper {
                 }
             }
         };
-        int scheduledInterval = java.lang.Math.max(1, interval / INTERVAL_DIVISOR);
         if (repeat) {
-            future = runtime.scheduler().scheduleAtFixedRate(
-                    task, scheduledInterval, scheduledInterval, TimeUnit.MILLISECONDS);
+            future = runtime.scheduler().scheduleWithFixedDelay(
+                    task, interval, interval, TimeUnit.MILLISECONDS);
         } else {
-            future = runtime.scheduler().schedule(task, scheduledInterval, TimeUnit.MILLISECONDS);
+            future = runtime.scheduler().schedule(task, interval, TimeUnit.MILLISECONDS);
         }
     }
 

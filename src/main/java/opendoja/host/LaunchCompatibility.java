@@ -18,11 +18,13 @@ final class LaunchCompatibility {
         String targetEncoding = targetDefaultEncoding();
         boolean needsEncodingCompat = targetEncoding != null && !defaultCharsetMatches(targetEncoding);
         boolean disableExplicitGc = shouldDisableExplicitGc();
-        if (!needsEncodingCompat && !disableExplicitGc) {
+        boolean limitHotSpotTier = shouldLimitHotSpotTier();
+        if (!needsEncodingCompat && !disableExplicitGc && !limitHotSpotTier) {
             return;
         }
 
-        Process process = new ProcessBuilder(buildJavaCommand(targetEncoding, disableExplicitGc, JamLauncher.class.getName(),
+        Process process = new ProcessBuilder(buildJavaCommand(targetEncoding, disableExplicitGc, limitHotSpotTier,
+                        JamLauncher.class.getName(),
                         new String[]{jamPath.toString()}))
                 .inheritIO()
                 .start();
@@ -30,12 +32,14 @@ final class LaunchCompatibility {
         System.exit(exit);
     }
 
-    private static List<String> buildJavaCommand(String targetEncoding, boolean disableExplicitGc, String mainClass, String[] args) {
+    private static List<String> buildJavaCommand(String targetEncoding, boolean disableExplicitGc, boolean limitHotSpotTier,
+            String mainClass, String[] args) {
         List<String> command = new ArrayList<>();
         command.add(Path.of(System.getProperty("java.home"), "bin", "java").toString());
         for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
             if (arg.startsWith("-D" + OpenDoJaLaunchArgs.LAUNCH_COMPAT_APPLIED + "=")
                     || arg.startsWith("-Dfile.encoding=")
+                    || arg.startsWith("-XX:TieredStopAtLevel=")
                     || arg.equals("-XX:+DisableExplicitGC")
                     || arg.equals("-XX:-DisableExplicitGC")) {
                 continue;
@@ -48,6 +52,11 @@ final class LaunchCompatibility {
             // handset-era memory hint. On desktop HotSpot that becomes a blocking full GC, which
             // stalls the single game thread and drags audio down with it.
             command.add("-XX:+DisableExplicitGC");
+        }
+        if (limitHotSpotTier) {
+            // The official emulator runs on JBlend rather than HotSpot C2. Stopping at tier 1
+            // keeps legacy empty polling loops observable without per-title deoptimization.
+            command.add("-XX:TieredStopAtLevel=1");
         }
         // Many DoJa-era games decode resource tables through String(byte[], off, len), which
         // follows the VM default charset. Modern Java defaults to UTF-8, but the handset-era
@@ -107,5 +116,17 @@ final class LaunchCompatibility {
         } catch (RuntimeException ignored) {
             return true;
         }
+    }
+
+    private static boolean shouldLimitHotSpotTier() {
+        for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+            if (arg.equals("-Xint")
+                    || arg.startsWith("-XX:TieredStopAtLevel=")
+                    || arg.equals("-XX:+TieredCompilation")
+                    || arg.equals("-XX:-TieredCompilation")) {
+                return false;
+            }
+        }
+        return true;
     }
 }

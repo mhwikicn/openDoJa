@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.prefs.Preferences;
 
 final class LauncherPreferencesStore {
-    private static final int MAX_RECENTS = 5;
+    private static final int MAX_RECENTS = 10;
     private static final String HOST_SCALE_KEY = "hostScale";
     private static final String SYNTH_ID_KEY = "synthId";
     private static final String TERMINAL_ID_KEY = "terminalId";

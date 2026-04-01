@@ -111,7 +111,7 @@ public final class Timer implements TimeKeeper {
         };
         if (repeat) {
             int interval = java.lang.Math.max(1, time);
-            future = runtime.scheduler().scheduleAtFixedRate(task, interval, interval, TimeUnit.MILLISECONDS);
+            future = runtime.scheduler().scheduleWithFixedDelay(task, interval, interval, TimeUnit.MILLISECONDS);
         } else {
             future = runtime.scheduler().schedule(task, time, TimeUnit.MILLISECONDS);
         }
