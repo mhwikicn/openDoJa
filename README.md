@@ -32,12 +32,6 @@ Launch a specific JAM directly through the packaged launcher:
 java -jar opendoja-{version}.jar --run-jam <game.jam>
 ```
 
-Print all available launcher options:
-
-```bash
-java -jar opendoja-{version}.jar --help
-```
-
 Launch a JAM directly without the launcher UI, with explicit host scale, synth, user ID, and terminal ID:
 
 ```bash
@@ -47,6 +41,12 @@ java \
   -Dopendoja.userId=<uid> \
   -Dopendoja.terminalId=<tid> \
   -jar opendoja-{version}.jar --run-jam <game.jam>
+```
+
+Print all available launcher options:
+
+```bash
+java -jar opendoja-{version}.jar --help
 ```
 
 ## Reporting Broken Games
