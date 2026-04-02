@@ -22,6 +22,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -534,7 +535,7 @@ public final class DoJaRuntime {
         if (relativeToSource != null && Files.exists(relativeToSource)) {
             return new ByteArrayInputStream(Files.readAllBytes(relativeToSource));
         }
-        throw new IOException("Resource not found: " + path);
+        throw new FileNotFoundException("Resource not found: " + path);
     }
 
     private static InputStream toBufferedResourceStream(InputStream raw) throws IOException {

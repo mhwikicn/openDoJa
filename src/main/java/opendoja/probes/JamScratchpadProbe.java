@@ -6,10 +6,14 @@ import opendoja.host.JamLauncher;
 import opendoja.host.LaunchConfig;
 import opendoja.host.OpenDoJaLog;
 
+import javax.microedition.io.ConnectionNotFoundException;
 import javax.microedition.io.Connector;
+import java.io.DataInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -23,9 +27,13 @@ public final class JamScratchpadProbe {
         System.setProperty("java.awt.headless", "true");
         OpenDoJaLog.configure(OpenDoJaLog.Level.WARN);
 
+        verifyScratchpadIsDisabledWithoutSpSize();
         verifySiblingScratchpadWrite();
         verifyParentSpFallbackWrite();
         verifyMissingScratchpadWarningAndCreation();
+        verifyDojaemuHeaderIsPreservedAndMapped();
+        verifyDeclaredSizeMismatchWarning();
+        verifyMissingResourceStaysMissingAndScratchpadStillReads();
 
         System.out.println("Jam scratchpad probe OK");
     }
@@ -34,8 +42,8 @@ public final class JamScratchpadProbe {
         Path root = Files.createTempDirectory("jam-sp-sibling");
         Path jam = root.resolve("Sibling.jam");
         Path scratchpad = root.resolve("Sibling.sp");
-        Files.write(scratchpad, new byte[0]);
-        writeJam(jam, null);
+        Files.write(scratchpad, new byte[2]);
+        writeJam(jam, "SPsize=2\n");
 
         LaunchConfig config = JamLauncher.buildLaunchConfig(jam, false);
         check(scratchpad.equals(config.scratchpadPackedFile()), "sibling .sp should be preferred");
@@ -50,8 +58,8 @@ public final class JamScratchpadProbe {
         Path sp = Files.createDirectories(root.resolve("sp"));
         Path jam = bin.resolve("Fallback.jam");
         Path scratchpad = sp.resolve("Fallback.sp");
-        Files.write(scratchpad, new byte[0]);
-        writeJam(jam, null);
+        Files.write(scratchpad, new byte[2]);
+        writeJam(jam, "SPsize=2\n");
 
         LaunchConfig config = JamLauncher.buildLaunchConfig(jam, false);
         check(scratchpad.equals(config.scratchpadPackedFile()), "../sp fallback should be selected when sibling is absent");
@@ -83,15 +91,129 @@ public final class JamScratchpadProbe {
         launchAndWrite(jam, "init");
         check(Files.exists(scratchpad), "missing .sp should be creatable at runtime");
         byte[] bytes = Files.readAllBytes(scratchpad);
-        check(bytes.length == 68, "SPsize-backed .sp should use a packed header layout");
-        check(Arrays.equals("init".getBytes(StandardCharsets.UTF_8), Arrays.copyOfRange(bytes, 64, 68)),
-                "runtime writes should land in the created packed .sp payload");
+        check(bytes.length == 4, "SPsize-backed .sp should use raw payload storage");
+        check(Arrays.equals("init".getBytes(StandardCharsets.UTF_8), bytes),
+                "runtime writes should land at the start of the raw payload");
+    }
+
+    private static void verifyScratchpadIsDisabledWithoutSpSize() throws Exception {
+        Path root = Files.createTempDirectory("jam-sp-disabled");
+        Path jam = root.resolve("Disabled.jam");
+        Path scratchpad = root.resolve("Disabled.sp");
+        Files.writeString(scratchpad, "legacy", StandardCharsets.UTF_8);
+        writeJam(jam, null);
+
+        LaunchConfig config = JamLauncher.buildLaunchConfig(jam, false);
+        check(config.scratchpadPackedFile() == null, "scratchpad should stay disabled when SPsize is omitted");
+        check(config.scratchpadRoot() == null, "scratchpad root should stay disabled when SPsize is omitted");
+
+        IApplication app = JamLauncher.launch(jam, false);
+        try {
+            try (InputStream ignored = Connector.openInputStream("scratchpad:///0;pos=0")) {
+                throw new IllegalStateException("scratchpad:/// should fail when SPsize is omitted");
+            } catch (ConnectionNotFoundException expected) {
+                // Expected.
+            }
+        } finally {
+            DoJaRuntime runtime = DoJaRuntime.current();
+            if (runtime != null) {
+                runtime.shutdown();
+            }
+        }
+        if (app == null) {
+            throw new IllegalStateException("Jam launch returned null application");
+        }
+    }
+
+    private static void verifyDojaemuHeaderIsPreservedAndMapped() throws Exception {
+        Path root = Files.createTempDirectory("jam-sp-header");
+        Path jam = root.resolve("Header.jam");
+        Path scratchpad = root.resolve("Header.sp");
+        writeJam(jam, "SPsize=4\n");
+        byte[] original = dojaemuScratchpad("DATA");
+        Files.write(scratchpad, original);
+        launchAndRead(jam, 4);
+        launchAndWrite(jam, "PING");
+
+        byte[] bytes = Files.readAllBytes(scratchpad);
+        check(bytes.length == 68, "headered dojaemu .sp files should remain headered on disk");
+        check(Arrays.equals(Arrays.copyOf(original, 64), Arrays.copyOf(bytes, 64)),
+                "headered .sp files should preserve the original 64-byte header");
+        check(Arrays.equals("PING".getBytes(StandardCharsets.UTF_8), Arrays.copyOfRange(bytes, 64, 68)),
+                "logical scratchpad writes should land in the payload after the header");
+    }
+
+    private static void verifyDeclaredSizeMismatchWarning() throws Exception {
+        Path root = Files.createTempDirectory("jam-sp-mismatch");
+        Path jam = root.resolve("Mismatch.jam");
+        Path scratchpad = root.resolve("Mismatch.sp");
+        writeJam(jam, "SPsize=4\n");
+        Files.write(scratchpad, "abc".getBytes(StandardCharsets.UTF_8));
+
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        try (PrintStream capture = new PrintStream(captured, true, StandardCharsets.UTF_8)) {
+            System.setOut(capture);
+            launchAndRead(jam, 3);
+        } finally {
+            System.setOut(originalOut);
+        }
+
+        check(captured.toString(StandardCharsets.UTF_8).contains("declares 4 bytes but file size is 3"),
+                "scratchpad size mismatches should log a warning");
+    }
+
+    private static void verifyMissingResourceStaysMissingAndScratchpadStillReads() throws Exception {
+        Path root = Files.createTempDirectory("jam-sp-resource-fallback");
+        Path jam = root.resolve("Fallback.jam");
+        Path scratchpad = root.resolve("Fallback.sp");
+        writeJam(jam, "SPsize=4\n");
+        Files.write(scratchpad, dojaemuScratchpad("DATA"));
+
+        IApplication app = JamLauncher.launch(jam, false);
+        try {
+            try (DataInputStream ignored = Connector.openDataInputStream("resource:///0")) {
+                throw new IllegalStateException("missing resource:/// URL should throw ConnectionNotFoundException");
+            } catch (ConnectionNotFoundException expected) {
+                // Expected: packaged resource lookup should not bridge into scratchpad.
+            }
+
+            try (DataInputStream in = Connector.openDataInputStream("scratchpad:///0;pos=0,length=4")) {
+                byte[] bytes = in.readNBytes(4);
+                check(Arrays.equals("DATA".getBytes(StandardCharsets.UTF_8), bytes),
+                        "scratchpad:/// fallback should still read logical payload bytes");
+            }
+        } finally {
+            DoJaRuntime runtime = DoJaRuntime.current();
+            if (runtime != null) {
+                runtime.shutdown();
+            }
+        }
+        if (app == null) {
+            throw new IllegalStateException("Jam launch returned null application");
+        }
     }
 
     private static void launchAndWrite(Path jam, String value) throws Exception {
         IApplication app = JamLauncher.launch(jam, false);
         try (OutputStream out = Connector.openOutputStream("scratchpad:///0:pos=0")) {
             out.write(value.getBytes(StandardCharsets.UTF_8));
+        } finally {
+            DoJaRuntime runtime = DoJaRuntime.current();
+            if (runtime != null) {
+                runtime.shutdown();
+            }
+        }
+        if (app == null) {
+            throw new IllegalStateException("Jam launch returned null application");
+        }
+    }
+
+    private static void launchAndRead(Path jam, int expectedLength) throws Exception {
+        IApplication app = JamLauncher.launch(jam, false);
+        try (InputStream in = Connector.openInputStream("scratchpad:///0:pos=0")) {
+            byte[] bytes = in.readAllBytes();
+            check(bytes.length == expectedLength, "unexpected scratchpad payload length");
         } finally {
             DoJaRuntime runtime = DoJaRuntime.current();
             if (runtime != null) {
@@ -117,6 +239,17 @@ public final class JamScratchpadProbe {
         if (!condition) {
             throw new IllegalStateException(message);
         }
+    }
+
+    private static byte[] dojaemuScratchpad(String payload) {
+        byte[] bytes = payload.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(64 + bytes.length);
+        buffer.putInt(bytes.length);
+        for (int i = 1; i < 16; i++) {
+            buffer.putInt(-1);
+        }
+        buffer.put(bytes);
+        return buffer.array();
     }
 
     public static final class ProbeApp extends IApplication {

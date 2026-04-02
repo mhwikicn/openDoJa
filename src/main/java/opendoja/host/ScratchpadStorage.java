@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -15,6 +14,7 @@ final class ScratchpadStorage {
     private final Path legacyRoot;
     private final Path packedFile;
     private final int[] configuredSizes;
+    private volatile boolean warnedHeaderMismatch;
 
     ScratchpadStorage(Path legacyRoot, Path packedFile, int[] configuredSizes) {
         this.legacyRoot = legacyRoot;
@@ -56,7 +56,7 @@ final class ScratchpadStorage {
     }
 
     private ScratchpadAccess resolvePackedAccess(int index, long position, long requestedLength) throws IOException {
-        PackedLayout layout = PackedLayout.load(packedFile, configuredSizes);
+        PackedLayout layout = loadPackedLayout();
         if (layout.packed()) {
             ensurePackedFile(layout);
             return layout.access(index, position, requestedLength);
@@ -83,9 +83,60 @@ final class ScratchpadStorage {
         }
         try (RandomAccessFile file = new RandomAccessFile(packedFile.toFile(), "rw")) {
             file.setLength(layout.totalBytes());
-            file.seek(0L);
-            file.write(layout.headerBytes());
         }
+    }
+
+    private PackedLayout loadPackedLayout() throws IOException {
+        if (packedFile == null) {
+            return PackedLayout.single();
+        }
+        if (Files.exists(packedFile)) {
+            long fileSize = Files.size(packedFile);
+            if (configuredSizes.length > 0) {
+                return configuredLayoutFor(fileSize);
+            }
+            if (fileSize > 0L) {
+                return PackedLayout.single();
+            }
+        }
+        if (configuredSizes.length > 0) {
+            return PackedLayout.configured(configuredSizes, 0L, true);
+        }
+        return PackedLayout.single();
+    }
+
+    private PackedLayout configuredLayoutFor(long fileSize) {
+        long declaredPayloadBytes = declaredPayloadBytes(configuredSizes);
+        if (fileSize == declaredPayloadBytes + HEADER_BYTES) {
+            return PackedLayout.configured(configuredSizes, HEADER_BYTES, false);
+        }
+        if (fileSize == declaredPayloadBytes) {
+            return PackedLayout.configured(configuredSizes, 0L, false);
+        }
+        warnConfiguredSizeMismatch(fileSize, declaredPayloadBytes);
+        return PackedLayout.configured(configuredSizes, 0L, false);
+    }
+
+    private void warnConfiguredSizeMismatch(long fileSize, long declaredPayloadBytes) {
+        if (warnedHeaderMismatch) {
+            return;
+        }
+        warnedHeaderMismatch = true;
+        OpenDoJaLog.warn(ScratchpadStorage.class,
+                () -> "Packed .sp backing " + packedFile
+                        + " declares " + declaredPayloadBytes
+                        + " bytes but file size is " + fileSize
+                        + "; expected either " + declaredPayloadBytes
+                        + " (raw) or " + (declaredPayloadBytes + HEADER_BYTES)
+                        + " (with 64-byte dojaemu header)");
+    }
+
+    private static long declaredPayloadBytes(int[] sizes) {
+        long total = 0L;
+        for (int size : sizes) {
+            total += Math.max(0, size);
+        }
+        return total;
     }
 
     private record ScratchpadAccess(long offset, long length) {
@@ -104,62 +155,17 @@ final class ScratchpadStorage {
             this.synthetic = synthetic;
         }
 
-        static PackedLayout load(Path packedFile, int[] configuredSizes) throws IOException {
-            if (Files.exists(packedFile)) {
-                long fileSize = Files.size(packedFile);
-                if (fileSize >= HEADER_BYTES) {
-                    PackedLayout parsed = parseExisting(packedFile, fileSize, configuredSizes);
-                    if (parsed != null) {
-                        return parsed;
-                    }
-                }
-                if (fileSize > 0L) {
-                    return single();
-                }
-            }
-            if (configuredSizes.length > 0) {
-                return configured(configuredSizes);
-            }
-            return single();
-        }
-
-        private static PackedLayout parseExisting(Path packedFile, long fileSize, int[] configuredSizes) throws IOException {
-            byte[] header = Files.readAllBytes(packedFile);
-            if (header.length < HEADER_BYTES) {
-                return null;
-            }
-            ByteBuffer buffer = ByteBuffer.wrap(header, 0, HEADER_BYTES);
+        private static PackedLayout configured(int[] configuredSizes, long dataStart, boolean synthetic) {
             int[] sizes = new int[HEADER_ENTRIES];
             long[] offsets = new long[HEADER_ENTRIES];
-            long total = HEADER_BYTES;
-            long offset = HEADER_BYTES;
-            for (int i = 0; i < HEADER_ENTRIES; i++) {
-                int normalized = normalizeHeaderSize(buffer.getInt(), (int) fileSize, configuredSizes, i);
-                if (normalized < 0) {
-                    return null;
-                }
-                sizes[i] = normalized;
-                offsets[i] = offset;
-                total += normalized;
-                offset += normalized;
-            }
-            if (total != fileSize) {
-                return null;
-            }
-            return new PackedLayout(sizes, offsets, true, false);
-        }
-
-        private static PackedLayout configured(int[] configuredSizes) {
-            int[] sizes = new int[HEADER_ENTRIES];
-            long[] offsets = new long[HEADER_ENTRIES];
-            long offset = HEADER_BYTES;
+            long offset = Math.max(0L, dataStart);
             for (int i = 0; i < HEADER_ENTRIES; i++) {
                 int size = i < configuredSizes.length ? Math.max(0, configuredSizes[i]) : 0;
                 sizes[i] = size;
                 offsets[i] = offset;
                 offset += size;
             }
-            return new PackedLayout(sizes, offsets, true, true);
+            return new PackedLayout(sizes, offsets, true, synthetic);
         }
 
         private static PackedLayout single() {
@@ -178,46 +184,20 @@ final class ScratchpadStorage {
             if (!packed) {
                 return 0L;
             }
-            return offsets.length == 0 ? HEADER_BYTES : offsets[offsets.length - 1] + sizes[sizes.length - 1];
-        }
-
-        byte[] headerBytes() {
-            ByteBuffer buffer = ByteBuffer.allocate(HEADER_BYTES);
-            for (int i = 0; i < HEADER_ENTRIES; i++) {
-                int size = i < sizes.length ? sizes[i] : 0;
-                buffer.putInt(size > 0 ? size : -1);
-            }
-            return buffer.array();
+            return offsets.length == 0 ? 0L : offsets[offsets.length - 1] + sizes[sizes.length - 1];
         }
 
         ScratchpadAccess access(int index, long position, long requestedLength) {
             int safeIndex = index < 0 || index >= HEADER_ENTRIES ? HEADER_ENTRIES : index;
             long normalizedPosition = Math.max(0L, position);
             if (safeIndex >= HEADER_ENTRIES) {
-                return new ScratchpadAccess(HEADER_BYTES + normalizedPosition, 0L);
+                return new ScratchpadAccess(normalizedPosition, 0L);
             }
             int segmentSize = sizes[safeIndex];
             long clampedPosition = Math.min(normalizedPosition, segmentSize);
             long available = Math.max(0L, segmentSize - clampedPosition);
             long boundedLength = requestedLength < 0L ? available : Math.min(requestedLength, available);
             return new ScratchpadAccess(offsets[safeIndex] + clampedPosition, boundedLength);
-        }
-
-        private static int normalizeHeaderSize(int raw, int seedLength, int[] configuredSizes, int index) {
-            int chosen = raw;
-            int reversed = Integer.reverseBytes(raw);
-            int configured = index < configuredSizes.length ? configuredSizes[index] : Integer.MIN_VALUE;
-            if (configured != Integer.MIN_VALUE) {
-                if (reversed == configured && chosen != configured) {
-                    chosen = reversed;
-                }
-            } else if (chosen > seedLength || chosen < -1) {
-                chosen = reversed;
-            }
-            if (chosen > seedLength || chosen < -1) {
-                return -1;
-            }
-            return chosen == -1 ? 0 : chosen;
         }
     }
 }

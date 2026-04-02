@@ -43,14 +43,20 @@ public final class JamLauncher {
         @SuppressWarnings("unchecked")
         Class<? extends IApplication> applicationClass = (Class<? extends IApplication>) rawClass;
         int[] scratchpadSizes = parseScratchpadSizes(properties.getProperty("SPsize"));
-        ResolvedScratchpad scratchpad = resolveScratchpad(jamPath);
         LaunchConfig.Builder builder = LaunchConfig.builder(applicationClass)
                 .title(properties.getProperty("AppName", applicationClass.getSimpleName()))
                 .sourceUrl(resolvePackageUrl(jamPath, properties.getProperty("PackageURL")))
-                .scratchpadPackedFile(scratchpad.path())
                 .scratchpadSizes(scratchpadSizes)
                 .iAppliType(LaunchConfig.IAppliType.fromJamProperties(properties))
                 .exitOnShutdown(exitOnShutdown);
+        ResolvedScratchpad scratchpad = null;
+        if (scratchpadSizes.length > 0) {
+            scratchpad = resolveScratchpad(jamPath);
+            builder.scratchpadPackedFile(scratchpad.path());
+        } else {
+            builder.scratchpadRoot(null)
+                    .scratchpadPackedFile(null);
+        }
         applyOptionalDrawArea(builder, properties.getProperty("DrawArea"));
         String appParam = properties.getProperty("AppParam");
         if (appParam != null && !appParam.isBlank()) {
@@ -59,10 +65,11 @@ public final class JamLauncher {
         for (String name : properties.stringPropertyNames()) {
             builder.parameter(name, properties.getProperty(name));
         }
-        if (!scratchpad.found()) {
+        if (scratchpad != null && !scratchpad.found()) {
+            ResolvedScratchpad missingScratchpad = scratchpad;
             OpenDoJaLog.warn(JamLauncher.class,
                     () -> "No .sp file found for " + jamPath + " next to the JAM or in ../sp; "
-                            + "continuing and using " + scratchpad.path() + " if the game creates one at runtime");
+                            + "continuing and using " + missingScratchpad.path() + " if the game creates one at runtime");
         }
         return builder.build();
     }

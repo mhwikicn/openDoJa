@@ -5,6 +5,7 @@ import opendoja.host.DoJaRuntime;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -61,12 +62,21 @@ public class Connector {
     public static InputStream openInputStream(String name) throws IOException {
         String lower = name.toLowerCase(Locale.ROOT);
         if (lower.startsWith("resource:///")) {
-            return DoJaRuntime.openLaunchResourceStream(name);
+            try {
+                return DoJaRuntime.openLaunchResourceStream(name);
+            } catch (FileNotFoundException e) {
+                ConnectionNotFoundException missing = new ConnectionNotFoundException(e.getMessage());
+                missing.initCause(e);
+                throw missing;
+            }
         }
         if (lower.startsWith("scratchpad:///")) {
             DoJaRuntime runtime = DoJaRuntime.current();
             if (runtime == null) {
                 throw new IOException("No active DoJa runtime for scratchpad URI: " + name);
+            }
+            if (runtime.scratchpadPackedFile() == null && runtime.scratchpadRoot() == null) {
+                throw new ConnectionNotFoundException("ScratchPad is not configured for this application");
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
             return runtime.openScratchpadInput(location.index(), location.position(), location.length());
@@ -83,6 +93,9 @@ public class Connector {
             DoJaRuntime runtime = DoJaRuntime.current();
             if (runtime == null) {
                 throw new IOException("No active DoJa runtime for scratchpad URI: " + name);
+            }
+            if (runtime.scratchpadPackedFile() == null && runtime.scratchpadRoot() == null) {
+                throw new ConnectionNotFoundException("ScratchPad is not configured for this application");
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
             return runtime.openScratchpadOutput(location.index(), location.position(), location.length());
