@@ -423,6 +423,18 @@ public interface Sampler
 	{
 		return false;
 	}
+
+	/**
+	 * Whether this sampler instance owns the legacy top-level MLD resource-audio
+	 * path (`ainf` / `adat` plus `0x7f` resource events).
+	 *
+	 * @return {@code true} if the player should route top-level resource audio
+	 * through this sampler family.
+	 */
+	default boolean supportsResourceAudio()
+	{
+		return false;
+	}
 	
 	/**
 	 * Specify a channel's volume. The master volume is multiplied by each

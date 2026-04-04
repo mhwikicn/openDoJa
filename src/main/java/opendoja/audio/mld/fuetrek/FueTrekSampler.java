@@ -541,6 +541,11 @@ final class FueTrekSampler implements Sampler {
     }
 
     @Override
+    public boolean supportsResourceAudio() {
+        return true;
+    }
+
+    @Override
     public void volume(int channel, float volume) {
         if (Float.isNaN(volume) || Float.isInfinite(volume) || volume < 0.0f) {
             throw new IllegalArgumentException("Invalid volume.");

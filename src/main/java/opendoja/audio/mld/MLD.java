@@ -575,6 +575,20 @@ public class MLD
 		if (event.id == MLD.EVENT_RESOURCE_AUX)
 		{
 			event.data = reader.bytes(reader.u16());
+			if (event.data.length >= 6)
+			{
+				int packed = event.data[0] & 0xFF;
+				event.param = packed;
+				event.channelIndex = packed >> 6;
+				event.channel = track << 2 | event.channelIndex;
+				event.resourceIndex = packed & 0x1F;
+				event.resourceAuxStrength = event.data[1] & 0xFF;
+				event.resourceAuxAzimuthDegrees =
+					this.decodeResourceAuxAzimuth(event.data[2] & 0xFF);
+				event.resourceAuxElevationDegrees =
+					this.decodeResourceAuxElevation(event.data[3] & 0xFF);
+				event.resourceAuxDurationRaw = this.readBe16(event.data, 4);
+			}
 			return event;
 		}
 
@@ -605,9 +619,8 @@ public class MLD
 				break;
 			case MLD.EVENT_RESOURCE_CONFIG:
 				event.resourceAudioTarget = (packed & 0x20) != 0;
-				event.resourceConfigClear = (packed & 0x1F) == 31;
-				event.resourceConfigValue = event.resourceConfigClear ? 0 :
-					((packed & 0x1F) + 2);
+				event.resourceConfigRawValue = packed & 0x1F;
+				event.resourceConfigClear = event.resourceConfigRawValue == 31;
 				break;
 			default:
 				event.resourceIndex = low6;
@@ -1222,6 +1235,28 @@ public class MLD
 	private int readBe16(byte[] data, int offset)
 	{
 		return ((data[offset] & 0xFF) << 8) | (data[offset + 1] & 0xFF);
+	}
+
+	private int decodeResourceAuxAzimuth(int raw)
+	{
+		int value = raw * 3 - 0x180;
+		if (value < -180)
+			value = -180;
+		else if (value >= 180)
+			value = 180;
+		if (value < 0)
+			value += 360;
+		return value;
+	}
+
+	private int decodeResourceAuxElevation(int raw)
+	{
+		int value = raw * 3 - 0x180;
+		if (value < -90)
+			return -90;
+		if (value >= 90)
+			return 90;
+		return value;
 	}
 
 	private int resourceBodyLength(int command)

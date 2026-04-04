@@ -208,7 +208,8 @@ public class MLDPlayer
 		this.tracks = new MLDPlayerTrack[mld.tracks.length];
 		this.trackControlEngine = TrackControlEngine.create(
 			this.sampler.sequenceControlMode(), this.tracks.length);
-		this.resourceAudioEngine = new MLDResourceAudioEngine(mld, sampleRate);
+		this.resourceAudioEngine = this.sampler.supportsResourceAudio() ?
+			new MLDResourceAudioEngine(mld, sampleRate) : null;
 		
 		// Channels
 		for (int x = 0; x < this.channels.length; x++)
@@ -386,7 +387,8 @@ public class MLDPlayer
 	{
 		if (!this.sampler.isFinished())
 			return false;
-		if (this.resourceAudioEngine.hasLiveAudio(this.position))
+		if (this.resourceAudioEngine != null &&
+			this.resourceAudioEngine.hasLiveAudio(this.position))
 			return false;
 		for (MLDPlayerTrack track : this.tracks)
 		{
@@ -604,8 +606,9 @@ public class MLDPlayer
 					this.sampler.render(samples, offset, f, left, right,
 						erase,
 						clamp);
-					this.resourceAudioEngine.render(samples, offset, f, left, right,
-						clamp, this.position);
+					if (this.resourceAudioEngine != null)
+						this.resourceAudioEngine.render(samples, offset, f, left, right,
+							clamp, this.position);
 				}
 				
 				// State management
@@ -932,7 +935,8 @@ public class MLDPlayer
 
 	void evtResource(MLDPlayerTrack track, MLDEvent event)
 	{
-		this.resourceAudioEngine.handleEvent(this.position, event);
+		if (this.resourceAudioEngine != null)
+			this.resourceAudioEngine.handleEvent(this.position, event);
 		this.setTrackOffset(track, track.offset + 1);
 	}
 	
@@ -1158,7 +1162,8 @@ public class MLDPlayer
 		
 		// Initialize sampler
 		this.sampler.reset();
-		this.resourceAudioEngine.reset();
+		if (this.resourceAudioEngine != null)
+			this.resourceAudioEngine.reset();
 		
 		// Channels
 		for (MLDChannel chan : this.channels)
@@ -1368,8 +1373,8 @@ public class MLDPlayer
 
 	private int liveTailFrames()
 	{
-		int resourceFrames = this.resourceAudioEngine.framesUntilSilence(
-			this.position);
+		int resourceFrames = this.resourceAudioEngine != null ?
+			this.resourceAudioEngine.framesUntilSilence(this.position) : 0;
 		return resourceFrames > 0 ? Math.min(1024, resourceFrames) : 0;
 	}
 }

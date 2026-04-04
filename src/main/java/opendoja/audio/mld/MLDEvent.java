@@ -118,11 +118,19 @@ class MLDEvent
 
 	int resourcePitchByte = -1;
 
+	int resourceAuxStrength = -1;
+
+	int resourceAuxAzimuthDegrees = Integer.MIN_VALUE;
+
+	int resourceAuxElevationDegrees = Integer.MIN_VALUE;
+
+	int resourceAuxDurationRaw = -1;
+
 	boolean resourceAudioTarget;
 
 	boolean resourceConfigClear;
 
-	int resourceConfigValue = -1;
+	int resourceConfigRawValue = -1;
 	
 	float panpot;
 	

@@ -3,7 +3,8 @@ package opendoja.audio.mld;
 import java.util.ArrayList;
 import java.util.Arrays;
 
-final class MLDResourceAudioEngine {
+    final class MLDResourceAudioEngine {
+    private static final double DEG_TO_RAD = Math.PI / 180.0;
     private static final int DEFAULT_LEVEL = 127;
     private static final int DEFAULT_PAN = 64;
     private static final int DEFAULT_BANK_LEVEL = 127;
@@ -12,6 +13,8 @@ final class MLDResourceAudioEngine {
     private static final int PLUGIN_EXPORT_GAIN_SHIFT = 2;
     private static final int NATIVE_OUTPUT_SAMPLE_RATE = 32000;
     private static final float INV_MIX_SCALE = 1.0f / 8388608.0f;
+    // lib002 creates the DS handle with packet[0x0c] = 8, so DSModule keeps the block size at 4096 frames.
+    private static final int NATIVE_MOTION_BLOCK_FRAMES = 4096;
     private static final int[] NATIVE_LEVEL_Q16 = new int[] {
             0, 4, 16, 36, 65, 101, 146, 199,
             260, 329, 406, 491, 585, 686, 796, 914,
@@ -72,12 +75,15 @@ final class MLDResourceAudioEngine {
     private final DecodedResourceAudio[] decodedCatalog;
     private final ChannelState[] channelStates = new ChannelState[64];
     private final ArrayList<ActiveClip> activeClips = new ArrayList<>();
-    private final int[] initialAudioRoutes = new int[64];
+    private final int[] initialAudioRouteRaw = new int[64];
+    private final int[] initialSynthRouteRaw = new int[64];
     private final int outputSampleRate;
 
     MLDResourceAudioEngine(MLD mld, float sampleRate) {
         this.outputSampleRate = Math.max(1, Math.round(sampleRate));
         this.decodedCatalog = new DecodedResourceAudio[mld.adpcms.length];
+        Arrays.fill(this.initialAudioRouteRaw, -1);
+        Arrays.fill(this.initialSynthRouteRaw, -1);
         for (int i = 0; i < this.channelStates.length; i++) {
             this.channelStates[i] = new ChannelState();
         }
@@ -93,9 +99,11 @@ final class MLDResourceAudioEngine {
         for (ChannelState state : this.channelStates) {
             state.level = DEFAULT_LEVEL;
             state.pan = DEFAULT_PAN;
+            state.auxMotion.clear();
         }
         for (int i = 0; i < this.channelStates.length; i++) {
-            this.channelStates[i].route = this.initialAudioRoutes[i];
+            this.channelStates[i].audioRouteRaw = this.initialAudioRouteRaw[i];
+            this.channelStates[i].synthRouteRaw = this.initialSynthRouteRaw[i];
         }
     }
 
@@ -116,9 +124,20 @@ final class MLDResourceAudioEngine {
                 break;
             case MLD.EVENT_RESOURCE_CONFIG:
                 if (event.resourceAudioTarget) {
-                    this.channelStates[logicalChannel].route = Math.max(0,
-                            event.resourceConfigValue >= 0 ? event.resourceConfigValue : 0);
+                    int routeRaw = event.resourceConfigClear ? -1 : Math.max(0, event.resourceConfigRawValue);
+                    this.channelStates[logicalChannel].audioRouteRaw = routeRaw;
+                    this.updateLiveAudioRoute(framePosition, logicalChannel, routeRaw, event.resourceConfigClear);
+                    if (event.resourceConfigClear) {
+                        this.channelStates[logicalChannel].auxMotion.clear();
+                    }
+                } else {
+                    int routeRaw = event.resourceConfigClear ? -1 : Math.max(0, event.resourceConfigRawValue);
+                    this.channelStates[logicalChannel].synthRouteRaw = routeRaw;
+                    this.updateLiveSynthRoute(logicalChannel, routeRaw);
                 }
+                break;
+            case MLD.EVENT_RESOURCE_AUX:
+                this.handleAuxMotion(framePosition, logicalChannel, event);
                 break;
             default:
                 break;
@@ -145,16 +164,27 @@ final class MLDResourceAudioEngine {
 
             int inputIndex = (int) (mixStart - clip.startFrame);
             int outputIndex = offset + (int) (mixStart - framePosition) * 2;
-            int mixFrames = (int) (mixEnd - mixStart);
-            for (int frame = 0; frame < mixFrames; frame++) {
-                int sample = clip.audio.frames[inputIndex + frame];
-                int base = outputIndex + frame * 2;
-                samples[base] += scaleMixedSample(sample, clip.leftGainQ16) * leftScale;
-                samples[base + 1] += scaleMixedSample(sample, clip.rightGainQ16) * rightScale;
-                if (clamp) {
-                    samples[base] = clampSample(samples[base]);
-                    samples[base + 1] = clampSample(samples[base + 1]);
+            long segmentStart = mixStart;
+            while (segmentStart < mixEnd) {
+                this.advanceClipMotion(clip, segmentStart);
+                long segmentEnd = Math.min(mixEnd, this.nextSpatialBoundary(clip, segmentStart));
+                int segmentFrames = (int) (segmentEnd - segmentStart);
+                int segmentInputIndex = inputIndex + (int) (segmentStart - mixStart);
+                int segmentOutputIndex = outputIndex + (int) (segmentStart - mixStart) * 2;
+                StereoGain spatialGain = this.computeSpatialGain(clip);
+                int leftGainQ16 = combineQ16(clip.leftGainQ16, spatialGain.leftQ16);
+                int rightGainQ16 = combineQ16(clip.rightGainQ16, spatialGain.rightQ16);
+                for (int frame = 0; frame < segmentFrames; frame++) {
+                    int sample = clip.audio.frames[segmentInputIndex + frame];
+                    int base = segmentOutputIndex + frame * 2;
+                    samples[base] += scaleMixedSample(sample, leftGainQ16) * leftScale;
+                    samples[base + 1] += scaleMixedSample(sample, rightGainQ16) * rightScale;
+                    if (clamp) {
+                        samples[base] = clampSample(samples[base]);
+                        samples[base + 1] = clampSample(samples[base + 1]);
+                    }
                 }
+                segmentStart = segmentEnd;
             }
         }
         this.pruneFinished(frameLimit);
@@ -191,14 +221,92 @@ final class MLDResourceAudioEngine {
             return;
         }
 
+        this.retireMatchingClips(framePosition, logicalChannel, event.resourceIndex);
         StereoGain gain = this.computeStereoGain(this.channelStates[logicalChannel], DEFAULT_LEVEL);
-        this.activeClips.add(new ActiveClip(
+        AuxMotionPoint[] auxMotion = snapshotAuxMotion(this.channelStates[logicalChannel], event.resourceIndex, framePosition);
+        ActiveClip clip = new ActiveClip(
                 logicalChannel,
                 event.resourceIndex,
+                event.resourcePitchByte,
                 framePosition,
                 decoded,
+                this.channelStates[logicalChannel].audioRouteRaw,
+                this.channelStates[logicalChannel].synthRouteRaw,
+                nativeRouteSlotId(event.resourceIndex),
+                auxMotion.length,
                 gain.leftQ16,
-                gain.rightQ16));
+                gain.rightQ16);
+        for (AuxMotionPoint point : auxMotion) {
+            this.queueMotion(clip, point);
+        }
+        this.advanceClipMotion(clip, framePosition);
+        this.activeClips.add(clip);
+    }
+
+    private void appendLiveMotion(long framePosition, int logicalChannel, AuxMotionPoint point) {
+        for (int i = 0; i < this.activeClips.size(); i++) {
+            ActiveClip clip = this.activeClips.get(i);
+            if (clip.stopFrame >= 0 || clip.logicalChannel != logicalChannel || clip.resourceIndex != point.resourceIndex) {
+                continue;
+            }
+            this.advanceClipMotion(clip, framePosition);
+            this.queueMotion(clip, point);
+        }
+    }
+
+    private void updateLiveAudioRoute(long framePosition, int logicalChannel, int routeRaw, boolean clear) {
+        for (int i = 0; i < this.activeClips.size(); i++) {
+            ActiveClip clip = this.activeClips.get(i);
+            if (clip.stopFrame >= 0 || clip.logicalChannel != logicalChannel) {
+                continue;
+            }
+            this.advanceClipMotion(clip, framePosition);
+            clip.audioRouteRaw = routeRaw;
+            if (!clear) {
+                continue;
+            }
+            clip.liveMotion.clear();
+            clip.nextMotionIndex = 0;
+            clip.motionCurrentX = 0;
+            clip.motionCurrentY = 0;
+            clip.motionCurrentZ = 0;
+            clip.motionTargetX = 0;
+            clip.motionTargetY = 0;
+            clip.motionTargetZ = 0;
+            clip.motionDeltaX = 0;
+            clip.motionDeltaY = 0;
+            clip.motionDeltaZ = 0;
+            clip.motionRemainingBlocks = 0;
+            clip.nextMotionBlockFrame = Long.MAX_VALUE;
+        }
+    }
+
+    private void updateLiveSynthRoute(int logicalChannel, int routeRaw) {
+        for (int i = 0; i < this.activeClips.size(); i++) {
+            ActiveClip clip = this.activeClips.get(i);
+            if (clip.stopFrame >= 0 || clip.logicalChannel != logicalChannel) {
+                continue;
+            }
+            clip.synthRouteRaw = routeRaw;
+        }
+    }
+
+    private void handleAuxMotion(long framePosition, int logicalChannel, MLDEvent event) {
+        if (event.resourceAuxStrength < 0 ||
+                event.resourceAuxAzimuthDegrees == Integer.MIN_VALUE ||
+                event.resourceAuxElevationDegrees == Integer.MIN_VALUE ||
+                event.resourceAuxDurationRaw < 0) {
+            return;
+        }
+        AuxMotionPoint point = new AuxMotionPoint(
+                framePosition,
+                event.resourceIndex,
+                event.resourceAuxStrength,
+                event.resourceAuxAzimuthDegrees,
+                event.resourceAuxElevationDegrees,
+                event.resourceAuxDurationRaw);
+        this.channelStates[logicalChannel].auxMotion.add(point);
+        this.appendLiveMotion(framePosition, logicalChannel, point);
     }
 
     private void stopClip(long framePosition, int logicalChannel, int resourceIndex) {
@@ -209,9 +317,47 @@ final class MLDResourceAudioEngine {
             }
             if (resourceIndex < 0 || clip.resourceIndex == resourceIndex) {
                 clip.stopFrame = Math.max(framePosition, clip.startFrame);
-                return;
             }
         }
+    }
+
+    private void retireMatchingClips(long framePosition, int logicalChannel, int resourceIndex) {
+        for (int i = this.activeClips.size() - 1; i >= 0; i--) {
+            ActiveClip clip = this.activeClips.get(i);
+            if (clip.stopFrame >= 0) {
+                continue;
+            }
+            if (clip.logicalChannel != logicalChannel || clip.resourceIndex != resourceIndex) {
+                continue;
+            }
+            clip.stopFrame = Math.max(framePosition, clip.startFrame);
+        }
+    }
+
+    private static AuxMotionPoint[] snapshotAuxMotion(ChannelState state, int resourceIndex, long framePosition) {
+        if (state.auxMotion.isEmpty()) {
+            return new AuxMotionPoint[0];
+        }
+        ArrayList<AuxMotionPoint> matching = new ArrayList<>();
+        for (int i = 0; i < state.auxMotion.size(); i++) {
+            AuxMotionPoint point = state.auxMotion.get(i);
+            if (point.framePosition > framePosition) {
+                continue;
+            }
+            if (point.resourceIndex == resourceIndex) {
+                matching.add(point);
+            }
+        }
+        return matching.toArray(new AuxMotionPoint[0]);
+    }
+
+    private static int nativeMotionBlockCount(int durationMillis, int outputSampleRate) {
+        if (durationMillis <= 0) {
+            return 1;
+        }
+        long numerator = (long) outputSampleRate * durationMillis;
+        long denominator = (long) NATIVE_MOTION_BLOCK_FRAMES * 1000L;
+        return Math.max(1, (int) (numerator / denominator) + 1);
     }
 
     private void pruneFinished(long framePosition) {
@@ -225,44 +371,158 @@ final class MLDResourceAudioEngine {
         }
     }
 
+    private void queueMotion(ActiveClip clip, AuxMotionPoint point) {
+        clip.liveMotion.add(point);
+    }
+
+    private void advanceClipMotion(ActiveClip clip, long framePosition) {
+        while (clip.nextMotionIndex < clip.liveMotion.size()) {
+            AuxMotionPoint point = clip.liveMotion.get(clip.nextMotionIndex);
+            if (point.framePosition > framePosition) {
+                break;
+            }
+            this.advanceBlockMotion(clip, point.framePosition);
+            int remainingBlocks = nativeMotionBlockCount(point.durationRaw, this.outputSampleRate);
+            clip.motionTargetX = point.nativeXCentiUnits;
+            clip.motionTargetY = point.nativeYCentiUnits;
+            clip.motionTargetZ = point.nativeZCentiUnits;
+            clip.motionRemainingBlocks = remainingBlocks;
+            if (remainingBlocks <= 1) {
+                clip.motionCurrentX = clip.motionTargetX;
+                clip.motionCurrentY = clip.motionTargetY;
+                clip.motionCurrentZ = clip.motionTargetZ;
+                clip.motionDeltaX = 0;
+                clip.motionDeltaY = 0;
+                clip.motionDeltaZ = 0;
+                clip.nextMotionBlockFrame = Long.MAX_VALUE;
+            } else {
+                clip.motionDeltaX = (clip.motionTargetX - clip.motionCurrentX) / remainingBlocks;
+                clip.motionDeltaY = (clip.motionTargetY - clip.motionCurrentY) / remainingBlocks;
+                clip.motionDeltaZ = (clip.motionTargetZ - clip.motionCurrentZ) / remainingBlocks;
+                clip.nextMotionBlockFrame = point.framePosition + NATIVE_MOTION_BLOCK_FRAMES;
+            }
+            clip.nextMotionIndex++;
+        }
+        this.advanceBlockMotion(clip, framePosition);
+    }
+
+    private void advanceBlockMotion(ActiveClip clip, long framePosition) {
+        while (clip.nextMotionBlockFrame != Long.MAX_VALUE && clip.nextMotionBlockFrame <= framePosition) {
+            if (clip.motionRemainingBlocks <= 1) {
+                clip.motionCurrentX = clip.motionTargetX;
+                clip.motionCurrentY = clip.motionTargetY;
+                clip.motionCurrentZ = clip.motionTargetZ;
+                clip.motionDeltaX = 0;
+                clip.motionDeltaY = 0;
+                clip.motionDeltaZ = 0;
+                clip.motionRemainingBlocks = 0;
+                clip.nextMotionBlockFrame = Long.MAX_VALUE;
+                continue;
+            }
+            clip.motionCurrentX = clampNativeCentiInt(clip.motionCurrentX + clip.motionDeltaX);
+            clip.motionCurrentY = clampNativeCentiInt(clip.motionCurrentY + clip.motionDeltaY);
+            clip.motionCurrentZ = clampNativeCentiInt(clip.motionCurrentZ + clip.motionDeltaZ);
+            clip.motionRemainingBlocks--;
+            clip.nextMotionBlockFrame += NATIVE_MOTION_BLOCK_FRAMES;
+            if (clip.motionRemainingBlocks <= 1) {
+                clip.motionCurrentX = clip.motionTargetX;
+                clip.motionCurrentY = clip.motionTargetY;
+                clip.motionCurrentZ = clip.motionTargetZ;
+                clip.motionDeltaX = 0;
+                clip.motionDeltaY = 0;
+                clip.motionDeltaZ = 0;
+                clip.motionRemainingBlocks = 0;
+                clip.nextMotionBlockFrame = Long.MAX_VALUE;
+            }
+        }
+    }
+
+    private long nextSpatialBoundary(ActiveClip clip, long framePosition) {
+        long next = Long.MAX_VALUE;
+        if (clip.nextMotionIndex < clip.liveMotion.size()) {
+            long eventFrame = clip.liveMotion.get(clip.nextMotionIndex).framePosition;
+            if (eventFrame > framePosition) {
+                next = Math.min(next, eventFrame);
+            }
+        }
+        if (clip.nextMotionBlockFrame > framePosition) {
+            next = Math.min(next, clip.nextMotionBlockFrame);
+        }
+        return next;
+    }
+
+    private StereoGain computeSpatialGain(ActiveClip clip) {
+        return new StereoGain(0x10000, 0x10000);
+    }
+
     private DecodedResourceAudio decodeCatalogEntry(MLDADPCM adat) {
-        if (adat == null ||
-                adat.selectorId != 0x81 ||
-                adat.sampleRateHz <= 0 ||
-                adat.channelCount != 1 ||
-                adat.variantBit ||
-                !MLDNativeADPCMDecoder.supportsLivePath(adat.sampleRateHz, adat.codedBits, adat.channelCount)) {
+        if (adat == null || adat.sampleRateHz <= 0 || adat.channelCount != 1) {
             return null;
         }
 
-        int[] nativeFrames = MLDNativeADPCMDecoder.decodeLiveMonoNativeLane0(
-                adat.sampleRateHz,
-                adat.codedBits,
-                adat.payload);
-        int[] slotFrames = convertSlotFrames(nativeFrames);
-        if (this.outputSampleRate == NATIVE_OUTPUT_SAMPLE_RATE) {
+        int[] slotFrames;
+        int decodedSampleRate;
+        if (adat.selectorId == 0x81 &&
+                !adat.variantBit &&
+                MLDNativeADPCMDecoder.supportsLivePath(adat.sampleRateHz, adat.codedBits, adat.channelCount)) {
+            int[] nativeFrames = MLDNativeADPCMDecoder.decodeLiveMonoNativeLane0(
+                    adat.sampleRateHz,
+                    adat.codedBits,
+                    adat.payload);
+            slotFrames = convertSlotFrames(nativeFrames);
+            decodedSampleRate = NATIVE_OUTPUT_SAMPLE_RATE;
+        } else if (adat.selectorId == 0x80 && adat.codedBits == 16) {
+            slotFrames = decodePcm16Mono(adat.payload);
+            decodedSampleRate = adat.sampleRateHz;
+        } else {
+            return null;
+        }
+
+        if (this.outputSampleRate == decodedSampleRate) {
             return new DecodedResourceAudio(slotFrames);
         }
-        return new DecodedResourceAudio(resampleLinear(slotFrames, NATIVE_OUTPUT_SAMPLE_RATE, this.outputSampleRate));
+        return new DecodedResourceAudio(resampleLinear(slotFrames, decodedSampleRate, this.outputSampleRate));
+    }
+
+    private static int[] decodePcm16Mono(byte[] payload) {
+        if (payload.length < 2) {
+            return new int[0];
+        }
+        int sampleCount = payload.length / 2;
+        int[] frames = new int[sampleCount];
+        for (int i = 0; i < sampleCount; i++) {
+            int offset = i * 2;
+            frames[i] = (short) ((payload[offset] & 0xFF) | (payload[offset + 1] << 8));
+        }
+        return frames;
     }
 
     private void parseThrdAudioRoutes(byte[] thrd) {
         if (thrd == null || thrd.length <= 1) {
             return;
         }
-        boolean[] seen = new boolean[this.initialAudioRoutes.length];
+        boolean[] seenAudio = new boolean[this.initialAudioRouteRaw.length];
+        boolean[] seenSynth = new boolean[this.initialSynthRouteRaw.length];
         for (int offset = 1; offset + 1 < thrd.length; offset += 2) {
             int logicalChannel = thrd[offset] & 0x0F;
-            if (logicalChannel < 0 || logicalChannel >= this.initialAudioRoutes.length || seen[logicalChannel]) {
+            if (logicalChannel < 0 || logicalChannel >= this.initialAudioRouteRaw.length) {
                 continue;
             }
             int packed = thrd[offset + 1] & 0xFF;
-            if ((packed & 0x20) == 0) {
-                continue;
+            boolean audioTarget = (packed & 0x20) != 0;
+            if (audioTarget) {
+                if (seenAudio[logicalChannel]) {
+                    continue;
+                }
+                this.initialAudioRouteRaw[logicalChannel] = packed & 0x1F;
+                seenAudio[logicalChannel] = true;
+            } else {
+                if (seenSynth[logicalChannel]) {
+                    continue;
+                }
+                this.initialSynthRouteRaw[logicalChannel] = packed & 0x1F;
+                seenSynth[logicalChannel] = true;
             }
-            int rawSubvalue = packed & 0x1F;
-            this.initialAudioRoutes[logicalChannel] = (rawSubvalue == 31 ? 0 : rawSubvalue + 2);
-            seen[logicalChannel] = true;
         }
     }
 
@@ -328,10 +588,16 @@ final class MLDResourceAudioEngine {
         return Math.max(min, Math.min(max, value));
     }
 
+    private static int nativeRouteSlotId(int resourceIndex) {
+        return resourceIndex + 2;
+    }
+
     private static final class ChannelState {
         int level;
         int pan;
-        int route;
+        int audioRouteRaw;
+        int synthRouteRaw;
+        final ArrayList<AuxMotionPoint> auxMotion = new ArrayList<>();
     }
 
     private static final class StereoGain {
@@ -355,23 +621,50 @@ final class MLDResourceAudioEngine {
     private static final class ActiveClip {
         final int logicalChannel;
         final int resourceIndex;
+        final int resourcePitchByte;
         final long startFrame;
         final DecodedResourceAudio audio;
+        int audioRouteRaw;
+        int synthRouteRaw;
+        final int nativeRouteSlotId;
+        final ArrayList<AuxMotionPoint> liveMotion;
         final int leftGainQ16;
         final int rightGainQ16;
+        int nextMotionIndex;
+        int motionCurrentX;
+        int motionCurrentY;
+        int motionCurrentZ;
+        int motionTargetX;
+        int motionTargetY;
+        int motionTargetZ;
+        int motionDeltaX;
+        int motionDeltaY;
+        int motionDeltaZ;
+        int motionRemainingBlocks;
+        long nextMotionBlockFrame = Long.MAX_VALUE;
         long stopFrame = -1L;
 
         ActiveClip(
                 int logicalChannel,
                 int resourceIndex,
+                int resourcePitchByte,
                 long startFrame,
                 DecodedResourceAudio audio,
+                int audioRouteRaw,
+                int synthRouteRaw,
+                int nativeRouteSlotId,
+                int initialMotionCapacity,
                 int leftGainQ16,
                 int rightGainQ16) {
             this.logicalChannel = logicalChannel;
             this.resourceIndex = resourceIndex;
+            this.resourcePitchByte = resourcePitchByte;
             this.startFrame = startFrame;
             this.audio = audio;
+            this.audioRouteRaw = audioRouteRaw;
+            this.synthRouteRaw = synthRouteRaw;
+            this.nativeRouteSlotId = nativeRouteSlotId;
+            this.liveMotion = new ArrayList<>(initialMotionCapacity);
             this.leftGainQ16 = leftGainQ16;
             this.rightGainQ16 = rightGainQ16;
         }
@@ -379,5 +672,65 @@ final class MLDResourceAudioEngine {
         long endFrame() {
             return this.startFrame + this.audio.frames.length;
         }
+    }
+
+    static final class AuxMotionPoint {
+        final long framePosition;
+        final int resourceIndex;
+        final int strength;
+        final int azimuthDegrees;
+        final int elevationDegrees;
+        final int durationRaw;
+        final short nativeXCentiUnits;
+        final short nativeYCentiUnits;
+        final short nativeZCentiUnits;
+
+        AuxMotionPoint(
+                long framePosition,
+                int resourceIndex,
+                int strength,
+                int azimuthDegrees,
+                int elevationDegrees,
+                int durationRaw) {
+            this.framePosition = framePosition;
+            this.resourceIndex = resourceIndex;
+            this.strength = strength;
+            this.azimuthDegrees = azimuthDegrees;
+            this.elevationDegrees = elevationDegrees;
+            this.durationRaw = durationRaw;
+            this.nativeXCentiUnits = nativeCartesianXCentiUnits(strength, azimuthDegrees, elevationDegrees);
+            this.nativeYCentiUnits = nativeCartesianYCentiUnits(strength, elevationDegrees);
+            this.nativeZCentiUnits = nativeCartesianZCentiUnits(strength, azimuthDegrees, elevationDegrees);
+        }
+    }
+
+    private static short nativeCartesianXCentiUnits(int strength, int azimuthDegrees, int elevationDegrees) {
+        double cosElevation = Math.cos(elevationDegrees * DEG_TO_RAD);
+        double distance = nativeDistance(strength);
+        return clampNativeCentiUnits(Math.sin(azimuthDegrees * DEG_TO_RAD) * cosElevation * distance);
+    }
+
+    private static short nativeCartesianYCentiUnits(int strength, int elevationDegrees) {
+        double distance = nativeDistance(strength);
+        return clampNativeCentiUnits(Math.sin(elevationDegrees * DEG_TO_RAD) * distance);
+    }
+
+    private static short nativeCartesianZCentiUnits(int strength, int azimuthDegrees, int elevationDegrees) {
+        double cosElevation = Math.cos(elevationDegrees * DEG_TO_RAD);
+        double distance = nativeDistance(strength);
+        return clampNativeCentiUnits(Math.cos(azimuthDegrees * DEG_TO_RAD) * cosElevation * distance);
+    }
+
+    private static double nativeDistance(int strength) {
+        return clamp(0, 127, strength) * 0.05;
+    }
+
+    private static short clampNativeCentiUnits(double value) {
+        int centiUnits = (int) Math.round(value * 100.0);
+        return (short) clamp(Short.MIN_VALUE, Short.MAX_VALUE, centiUnits);
+    }
+
+    private static int clampNativeCentiInt(int value) {
+        return clamp(Short.MIN_VALUE, Short.MAX_VALUE, value);
     }
 }
