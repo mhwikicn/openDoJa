@@ -22,7 +22,7 @@ import opendoja.g3d.FixedPoint;
  */
 public class AffineTrans {
     /** The element in row 1, column 1. */
-    public int m00 = FixedPoint.ONE;
+    public int m00;
     /** The element in row 1, column 2. */
     public int m01;
     /** The element in row 1, column 3. */
@@ -32,7 +32,7 @@ public class AffineTrans {
     /** The element in row 2, column 1. */
     public int m10;
     /** The element in row 2, column 2. */
-    public int m11 = FixedPoint.ONE;
+    public int m11;
     /** The element in row 2, column 3. */
     public int m12;
     /** The element in row 2, column 4. */
@@ -42,12 +42,12 @@ public class AffineTrans {
     /** The element in row 3, column 2. */
     public int m21;
     /** The element in row 3, column 3. */
-    public int m22 = FixedPoint.ONE;
+    public int m22;
     /** The element in row 3, column 4. */
     public int m23;
 
     /**
-     * Creates an identity matrix.
+     * Creates an empty matrix.
      */
     public AffineTrans() {
     }
@@ -55,23 +55,23 @@ public class AffineTrans {
     /**
      * Creates a matrix with the specified elements.
      *
-     * @param m00 the element in row 1, column 1
-     * @param m01 the element in row 1, column 2
-     * @param m02 the element in row 1, column 3
-     * @param m03 the element in row 1, column 4
-     * @param m10 the element in row 2, column 1
-     * @param m11 the element in row 2, column 2
-     * @param m12 the element in row 2, column 3
-     * @param m13 the element in row 2, column 4
-     * @param m20 the element in row 3, column 1
-     * @param m21 the element in row 3, column 2
-     * @param m22 the element in row 3, column 3
-     * @param m23 the element in row 3, column 4
+     * @param a00 the element in row 1, column 1
+     * @param a01 the element in row 1, column 2
+     * @param a02 the element in row 1, column 3
+     * @param a03 the element in row 1, column 4
+     * @param a10 the element in row 2, column 1
+     * @param a11 the element in row 2, column 2
+     * @param a12 the element in row 2, column 3
+     * @param a13 the element in row 2, column 4
+     * @param a20 the element in row 3, column 1
+     * @param a21 the element in row 3, column 2
+     * @param a22 the element in row 3, column 3
+     * @param a23 the element in row 3, column 4
      */
-    public AffineTrans(int m00, int m01, int m02, int m03,
-                       int m10, int m11, int m12, int m13,
-                       int m20, int m21, int m22, int m23) {
-        setElement(m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23);
+    public AffineTrans(int a00, int a01, int a02, int a03,
+                       int a10, int a11, int a12, int a13,
+                       int a20, int a21, int a22, int a23) {
+        setElement(a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23);
     }
 
     /**
@@ -85,6 +85,9 @@ public class AffineTrans {
      *         {@code column} is out of range
      */
     public void setElement(int row, int column, int value) {
+        if (row < 0 || row > 2 || column < 0 || column > 3) {
+            throw new ArrayIndexOutOfBoundsException();
+        }
         switch (row * 4 + column) {
             case 0 -> m00 = value;
             case 1 -> m01 = value;
@@ -105,52 +108,52 @@ public class AffineTrans {
     /**
      * Sets all elements of this matrix.
      *
-     * @param m00 the element in row 1, column 1
-     * @param m01 the element in row 1, column 2
-     * @param m02 the element in row 1, column 3
-     * @param m03 the element in row 1, column 4
-     * @param m10 the element in row 2, column 1
-     * @param m11 the element in row 2, column 2
-     * @param m12 the element in row 2, column 3
-     * @param m13 the element in row 2, column 4
-     * @param m20 the element in row 3, column 1
-     * @param m21 the element in row 3, column 2
-     * @param m22 the element in row 3, column 3
-     * @param m23 the element in row 3, column 4
+     * @param a00 the element in row 1, column 1
+     * @param a01 the element in row 1, column 2
+     * @param a02 the element in row 1, column 3
+     * @param a03 the element in row 1, column 4
+     * @param a10 the element in row 2, column 1
+     * @param a11 the element in row 2, column 2
+     * @param a12 the element in row 2, column 3
+     * @param a13 the element in row 2, column 4
+     * @param a20 the element in row 3, column 1
+     * @param a21 the element in row 3, column 2
+     * @param a22 the element in row 3, column 3
+     * @param a23 the element in row 3, column 4
      */
-    public void setElement(int m00, int m01, int m02, int m03,
-                           int m10, int m11, int m12, int m13,
-                           int m20, int m21, int m22, int m23) {
-        this.m00 = m00;
-        this.m01 = m01;
-        this.m02 = m02;
-        this.m03 = m03;
-        this.m10 = m10;
-        this.m11 = m11;
-        this.m12 = m12;
-        this.m13 = m13;
-        this.m20 = m20;
-        this.m21 = m21;
-        this.m22 = m22;
-        this.m23 = m23;
+    public void setElement(int a00, int a01, int a02, int a03,
+                           int a10, int a11, int a12, int a13,
+                           int a20, int a21, int a22, int a23) {
+        this.m00 = a00;
+        this.m01 = a01;
+        this.m02 = a02;
+        this.m03 = a03;
+        this.m10 = a10;
+        this.m11 = a11;
+        this.m12 = a12;
+        this.m13 = a13;
+        this.m20 = a20;
+        this.m21 = a21;
+        this.m22 = a22;
+        this.m23 = a23;
     }
 
     /**
      * Sets the elements of the specified row in this matrix.
      *
      * @param row the zero-based row number whose elements are to be set
-     * @param a the value for column 1 of the specified row
-     * @param b the value for column 2 of the specified row
-     * @param c the value for column 3 of the specified row
-     * @param d the value for column 4 of the specified row
+     * @param x the value for column 1 of the specified row
+     * @param y the value for column 2 of the specified row
+     * @param z the value for column 3 of the specified row
+     * @param w the value for column 4 of the specified row
      * @throws ArrayIndexOutOfBoundsException if {@code row} is outside
      *         {@code 0} through {@code 2}
      */
-    public void setRow(int row, int a, int b, int c, int d) {
+    public void setRow(int row, int x, int y, int z, int w) {
         switch (row) {
-            case 0 -> setElement(a, b, c, d, m10, m11, m12, m13, m20, m21, m22, m23);
-            case 1 -> setElement(m00, m01, m02, m03, a, b, c, d, m20, m21, m22, m23);
-            case 2 -> setElement(m00, m01, m02, m03, m10, m11, m12, m13, a, b, c, d);
+            case 0 -> setElement(x, y, z, w, m10, m11, m12, m13, m20, m21, m22, m23);
+            case 1 -> setElement(m00, m01, m02, m03, x, y, z, w, m20, m21, m22, m23);
+            case 2 -> setElement(m00, m01, m02, m03, m10, m11, m12, m13, x, y, z, w);
             default -> throw new ArrayIndexOutOfBoundsException();
         }
     }
@@ -159,33 +162,33 @@ public class AffineTrans {
      * Sets the elements of the specified column in this matrix.
      *
      * @param column the zero-based column number whose elements are to be set
-     * @param a the value for row 1 of the specified column
-     * @param b the value for row 2 of the specified column
-     * @param c the value for row 3 of the specified column
+     * @param x the value for row 1 of the specified column
+     * @param y the value for row 2 of the specified column
+     * @param z the value for row 3 of the specified column
      * @throws ArrayIndexOutOfBoundsException if {@code column} is outside
      *         {@code 0} through {@code 3}
      */
-    public void setColumn(int column, int a, int b, int c) {
+    public void setColumn(int column, int x, int y, int z) {
         switch (column) {
             case 0 -> {
-                m00 = a;
-                m10 = b;
-                m20 = c;
+                m00 = x;
+                m10 = y;
+                m20 = z;
             }
             case 1 -> {
-                m01 = a;
-                m11 = b;
-                m21 = c;
+                m01 = x;
+                m11 = y;
+                m21 = z;
             }
             case 2 -> {
-                m02 = a;
-                m12 = b;
-                m22 = c;
+                m02 = x;
+                m12 = y;
+                m22 = z;
             }
             case 3 -> {
-                m03 = a;
-                m13 = b;
-                m23 = c;
+                m03 = x;
+                m13 = y;
+                m23 = z;
             }
             default -> throw new ArrayIndexOutOfBoundsException();
         }
@@ -219,39 +222,39 @@ public class AffineTrans {
      * this object and {@code other}. The calculation is correct even when this
      * and {@code other} refer to the same object.
      *
-     * @param other the multiplier matrix
-     * @throws NullPointerException if {@code other} is {@code null}
+     * @param t the multiplier matrix
+     * @throws NullPointerException if {@code t} is {@code null}
      */
-    public void mul(AffineTrans other) {
-        mul(this, other);
+    public void mul(AffineTrans t) {
+        mul(this, t);
     }
 
     /**
      * Calculates the product of the transform matrices
      * {@code (left x right)} and stores the result in this object.
      *
-     * @param left the multiplicand matrix
-     * @param right the multiplier matrix
-     * @throws NullPointerException if {@code left} or {@code right} is
+     * @param t1 the multiplicand matrix
+     * @param t2 the multiplier matrix
+     * @throws NullPointerException if {@code t1} or {@code t2} is
      *         {@code null}
      */
-    public void mul(AffineTrans left, AffineTrans right) {
-        if (left == null || right == null) {
+    public void mul(AffineTrans t1, AffineTrans t2) {
+        if (t1 == null || t2 == null) {
             throw new NullPointerException();
         }
-        int rm00 = FixedPoint.mul(left.m00, right.m00) + FixedPoint.mul(left.m01, right.m10) + FixedPoint.mul(left.m02, right.m20);
-        int rm01 = FixedPoint.mul(left.m00, right.m01) + FixedPoint.mul(left.m01, right.m11) + FixedPoint.mul(left.m02, right.m21);
-        int rm02 = FixedPoint.mul(left.m00, right.m02) + FixedPoint.mul(left.m01, right.m12) + FixedPoint.mul(left.m02, right.m22);
-        int rm03 = FixedPoint.mul(left.m00, right.m03) + FixedPoint.mul(left.m01, right.m13) + FixedPoint.mul(left.m02, right.m23) + left.m03;
-        int rm10 = FixedPoint.mul(left.m10, right.m00) + FixedPoint.mul(left.m11, right.m10) + FixedPoint.mul(left.m12, right.m20);
-        int rm11 = FixedPoint.mul(left.m10, right.m01) + FixedPoint.mul(left.m11, right.m11) + FixedPoint.mul(left.m12, right.m21);
-        int rm12 = FixedPoint.mul(left.m10, right.m02) + FixedPoint.mul(left.m11, right.m12) + FixedPoint.mul(left.m12, right.m22);
-        int rm13 = FixedPoint.mul(left.m10, right.m03) + FixedPoint.mul(left.m11, right.m13) + FixedPoint.mul(left.m12, right.m23) + left.m13;
-        int rm20 = FixedPoint.mul(left.m20, right.m00) + FixedPoint.mul(left.m21, right.m10) + FixedPoint.mul(left.m22, right.m20);
-        int rm21 = FixedPoint.mul(left.m20, right.m01) + FixedPoint.mul(left.m21, right.m11) + FixedPoint.mul(left.m22, right.m21);
-        int rm22 = FixedPoint.mul(left.m20, right.m02) + FixedPoint.mul(left.m21, right.m12) + FixedPoint.mul(left.m22, right.m22);
-        int rm23 = FixedPoint.mul(left.m20, right.m03) + FixedPoint.mul(left.m21, right.m13) + FixedPoint.mul(left.m22, right.m23) + left.m23;
-        setElement(rm00, rm01, rm02, rm03, rm10, rm11, rm12, rm13, rm20, rm21, rm22, rm23);
+        int a00 = FixedPoint.mul(t1.m00, t2.m00) + FixedPoint.mul(t1.m01, t2.m10) + FixedPoint.mul(t1.m02, t2.m20);
+        int a01 = FixedPoint.mul(t1.m00, t2.m01) + FixedPoint.mul(t1.m01, t2.m11) + FixedPoint.mul(t1.m02, t2.m21);
+        int a02 = FixedPoint.mul(t1.m00, t2.m02) + FixedPoint.mul(t1.m01, t2.m12) + FixedPoint.mul(t1.m02, t2.m22);
+        int a03 = FixedPoint.mul(t1.m00, t2.m03) + FixedPoint.mul(t1.m01, t2.m13) + FixedPoint.mul(t1.m02, t2.m23) + t1.m03;
+        int a10 = FixedPoint.mul(t1.m10, t2.m00) + FixedPoint.mul(t1.m11, t2.m10) + FixedPoint.mul(t1.m12, t2.m20);
+        int a11 = FixedPoint.mul(t1.m10, t2.m01) + FixedPoint.mul(t1.m11, t2.m11) + FixedPoint.mul(t1.m12, t2.m21);
+        int a12 = FixedPoint.mul(t1.m10, t2.m02) + FixedPoint.mul(t1.m11, t2.m12) + FixedPoint.mul(t1.m12, t2.m22);
+        int a13 = FixedPoint.mul(t1.m10, t2.m03) + FixedPoint.mul(t1.m11, t2.m13) + FixedPoint.mul(t1.m12, t2.m23) + t1.m13;
+        int a20 = FixedPoint.mul(t1.m20, t2.m00) + FixedPoint.mul(t1.m21, t2.m10) + FixedPoint.mul(t1.m22, t2.m20);
+        int a21 = FixedPoint.mul(t1.m20, t2.m01) + FixedPoint.mul(t1.m21, t2.m11) + FixedPoint.mul(t1.m22, t2.m21);
+        int a22 = FixedPoint.mul(t1.m20, t2.m02) + FixedPoint.mul(t1.m21, t2.m12) + FixedPoint.mul(t1.m22, t2.m22);
+        int a23 = FixedPoint.mul(t1.m20, t2.m03) + FixedPoint.mul(t1.m21, t2.m13) + FixedPoint.mul(t1.m22, t2.m23) + t1.m23;
+        setElement(a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23);
     }
 
     /**
@@ -259,12 +262,15 @@ public class AffineTrans {
      * the x-axis in a right-handed coordinate system.
      * The fourth column is not changed.
      *
-     * @param angle the angle in 4096-per-circle units
+     * @param a the angle in 4096-per-circle units
      */
-    public void setRotateX(int angle) {
-        int cos = Math.cos(angle);
-        int sin = Math.sin(angle);
-        setElement(FixedPoint.ONE, 0, 0, 0, 0, cos, -sin, 0, 0, sin, cos, 0);
+    public void setRotateX(int a) {
+        int cos = Math.cos(a);
+        int sin = Math.sin(a);
+        int a03 = m03;
+        int a13 = m13;
+        int a23 = m23;
+        setElement(FixedPoint.ONE, 0, 0, a03, 0, cos, -sin, a13, 0, sin, cos, a23);
     }
 
     /**
@@ -272,12 +278,15 @@ public class AffineTrans {
      * the y-axis in a right-handed coordinate system.
      * The fourth column is not changed.
      *
-     * @param angle the angle in 4096-per-circle units
+     * @param a the angle in 4096-per-circle units
      */
-    public void setRotateY(int angle) {
-        int cos = Math.cos(angle);
-        int sin = Math.sin(angle);
-        setElement(cos, 0, sin, 0, 0, FixedPoint.ONE, 0, 0, -sin, 0, cos, 0);
+    public void setRotateY(int a) {
+        int cos = Math.cos(a);
+        int sin = Math.sin(a);
+        int a03 = m03;
+        int a13 = m13;
+        int a23 = m23;
+        setElement(cos, 0, sin, a03, 0, FixedPoint.ONE, 0, a13, -sin, 0, cos, a23);
     }
 
     /**
@@ -285,12 +294,15 @@ public class AffineTrans {
      * the z-axis in a right-handed coordinate system.
      * The fourth column is not changed.
      *
-     * @param angle the angle in 4096-per-circle units
+     * @param a the angle in 4096-per-circle units
      */
-    public void setRotateZ(int angle) {
-        int cos = Math.cos(angle);
-        int sin = Math.sin(angle);
-        setElement(cos, -sin, 0, 0, sin, cos, 0, 0, 0, 0, FixedPoint.ONE, 0);
+    public void setRotateZ(int a) {
+        int cos = Math.cos(a);
+        int sin = Math.sin(a);
+        int a03 = m03;
+        int a13 = m13;
+        int a23 = m23;
+        setElement(cos, -sin, 0, a03, sin, cos, 0, a13, 0, 0, FixedPoint.ONE, a23);
     }
 
     /**
@@ -299,26 +311,29 @@ public class AffineTrans {
      * The vector does not need to be a unit vector. The fourth column is not
      * changed.
      *
-     * @param vector the vector that becomes the axis of rotation
-     * @param angle the angle in 4096-per-circle units
-     * @throws NullPointerException if {@code vector} is {@code null}
+     * @param v the vector that becomes the axis of rotation
+     * @param a the angle in 4096-per-circle units
+     * @throws NullPointerException if {@code v} is {@code null}
      */
-    public void setRotateV(Vector3D vector, int angle) {
-        if (vector == null) {
+    public void setRotateV(Vector3D v, int a) {
+        if (v == null) {
             throw new NullPointerException();
         }
-        Vector3D axis = new Vector3D(vector.x, vector.y, vector.z);
+        Vector3D axis = new Vector3D(v.x, v.y, v.z);
         axis.normalize();
-        int cos = Math.cos(angle);
-        int sin = Math.sin(angle);
+        int cos = Math.cos(a);
+        int sin = Math.sin(a);
         int nc = FixedPoint.ONE - cos;
         int x = axis.x;
         int y = axis.y;
         int z = axis.z;
+        int a03 = m03;
+        int a13 = m13;
+        int a23 = m23;
         setElement(
-                cos + FixedPoint.mul(FixedPoint.mul(x, x), nc), FixedPoint.mul(FixedPoint.mul(x, y), nc) - FixedPoint.mul(z, sin), FixedPoint.mul(FixedPoint.mul(x, z), nc) + FixedPoint.mul(y, sin), 0,
-                FixedPoint.mul(FixedPoint.mul(y, x), nc) + FixedPoint.mul(z, sin), cos + FixedPoint.mul(FixedPoint.mul(y, y), nc), FixedPoint.mul(FixedPoint.mul(y, z), nc) - FixedPoint.mul(x, sin), 0,
-                FixedPoint.mul(FixedPoint.mul(z, x), nc) - FixedPoint.mul(y, sin), FixedPoint.mul(FixedPoint.mul(z, y), nc) + FixedPoint.mul(x, sin), cos + FixedPoint.mul(FixedPoint.mul(z, z), nc), 0
+                cos + FixedPoint.mul(FixedPoint.mul(x, x), nc), FixedPoint.mul(FixedPoint.mul(x, y), nc) - FixedPoint.mul(z, sin), FixedPoint.mul(FixedPoint.mul(x, z), nc) + FixedPoint.mul(y, sin), a03,
+                FixedPoint.mul(FixedPoint.mul(y, x), nc) + FixedPoint.mul(z, sin), cos + FixedPoint.mul(FixedPoint.mul(y, y), nc), FixedPoint.mul(FixedPoint.mul(y, z), nc) - FixedPoint.mul(x, sin), a13,
+                FixedPoint.mul(FixedPoint.mul(z, x), nc) - FixedPoint.mul(y, sin), FixedPoint.mul(FixedPoint.mul(z, y), nc) + FixedPoint.mul(x, sin), cos + FixedPoint.mul(FixedPoint.mul(z, z), nc), a23
         );
     }
 
@@ -326,29 +341,53 @@ public class AffineTrans {
      * Sets the matrix elements so that this matrix represents conversion to
      * view coordinates.
      *
-     * @param eye the position vector of the viewpoint
-     * @param center the position vector of the reference point
+     * @param position the position vector of the viewpoint
+     * @param look the position vector of the reference point
      * @param up the up vector
      * @throws NullPointerException if an argument is {@code null}
      */
-    public void lookAt(Vector3D eye, Vector3D center, Vector3D up) {
-        if (eye == null || center == null || up == null) {
+    public void lookAt(Vector3D position, Vector3D look, Vector3D up) {
+        if (position == null || look == null || up == null) {
             throw new NullPointerException();
         }
-        Vector3D forward = new Vector3D(center.x - eye.x, center.y - eye.y, center.z - eye.z);
-        forward.normalize();
+        if (up.x == 0 && up.y == 0 && up.z == 0) {
+            throw new IllegalArgumentException();
+        }
+        int fx = look.x - position.x;
+        int fy = look.y - position.y;
+        int fz = look.z - position.z;
+        if (fx == 0 && fy == 0 && fz == 0) {
+            throw new IllegalArgumentException();
+        }
+        if (fy * up.z - fz * up.y == 0
+                && fz * up.x - fx * up.z == 0
+                && fx * up.y - fy * up.x == 0) {
+            throw new IllegalArgumentException();
+        }
+        Vector3D forward = new Vector3D(fx, fy, fz);
+        try {
+            forward.normalize();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException();
+        }
         Vector3D side = new Vector3D();
         side.cross(forward, up);
-        side.normalize();
+        try {
+            side.normalize();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException();
+        }
         Vector3D actualUp = new Vector3D();
         actualUp.cross(forward, side);
-        // The orientation rows are 4.12 fixed-point unit vectors. The secondary cross-product
-        // therefore needs another normalization pass before it is stored into the matrix.
-        actualUp.normalize();
+        try {
+            actualUp.normalize();
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException();
+        }
         setElement(
-                side.x, side.y, side.z, -viewTranslation(side, eye),
-                actualUp.x, actualUp.y, actualUp.z, -viewTranslation(actualUp, eye),
-                forward.x, forward.y, forward.z, -viewTranslation(forward, eye)
+                side.x, side.y, side.z, -viewTranslation(side, position),
+                actualUp.x, actualUp.y, actualUp.z, -viewTranslation(actualUp, position),
+                forward.x, forward.y, forward.z, -viewTranslation(forward, position)
         );
     }
 
@@ -358,18 +397,21 @@ public class AffineTrans {
      * The calculation is correct even when {@code source} and
      * {@code destination} refer to the same object.
      *
-     * @param source the vector that represents point coordinates
-     * @param destination the vector into which the transformed result is stored
-     * @throws NullPointerException if {@code source} or {@code destination} is
+     * @param v the vector that represents point coordinates
+     * @param result the vector into which the transformed result is stored
+     * @throws NullPointerException if {@code v} or {@code result} is
      *         {@code null}
      */
-    public void transform(Vector3D source, Vector3D destination) {
-        if (source == null || destination == null) {
+    public void transform(Vector3D v, Vector3D result) {
+        if (v == null || result == null) {
             throw new NullPointerException();
         }
-        destination.x = FixedPoint.mul(source.x, m00) + FixedPoint.mul(source.y, m01) + FixedPoint.mul(source.z, m02) + m03;
-        destination.y = FixedPoint.mul(source.x, m10) + FixedPoint.mul(source.y, m11) + FixedPoint.mul(source.z, m12) + m13;
-        destination.z = FixedPoint.mul(source.x, m20) + FixedPoint.mul(source.y, m21) + FixedPoint.mul(source.z, m22) + m23;
+        int x = v.x;
+        int y = v.y;
+        int z = v.z;
+        result.x = FixedPoint.mul(x, m00) + FixedPoint.mul(y, m01) + FixedPoint.mul(z, m02) + m03;
+        result.y = FixedPoint.mul(x, m10) + FixedPoint.mul(y, m11) + FixedPoint.mul(z, m12) + m13;
+        result.z = FixedPoint.mul(x, m20) + FixedPoint.mul(y, m21) + FixedPoint.mul(z, m22) + m23;
     }
 
     float[] toFloatMatrix() {

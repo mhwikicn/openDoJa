@@ -68,11 +68,11 @@ public class Vector3D {
     /**
      * Calculates the inner product of this vector and the specified vector.
      * This is the same as calling {@link #dot(Vector3D, Vector3D)} with this
-     * object and {@code other}.
+     * object and {@code v}.
      *
-     * @param other the vector with which to take the inner product
+     * @param v the vector with which to take the inner product
      * @return the inner-product value
-     * @throws NullPointerException if {@code other} is {@code null}
+     * @throws NullPointerException if {@code v} is {@code null}
      */
     public int dot(Vector3D v) {
         return dot(this, v);
@@ -81,10 +81,10 @@ public class Vector3D {
     /**
      * Calculates the inner product of the two specified vectors.
      *
-     * @param left one of the vectors
-     * @param right the other vector
-     * @return the inner-product value of {@code left} and {@code right}
-     * @throws NullPointerException if {@code left} or {@code right} is
+     * @param v1 one of the vectors
+     * @param v2 the other vector
+     * @return the inner-product value of {@code v1} and {@code v2}
+     * @throws NullPointerException if {@code v1} or {@code v2} is
      *         {@code null}
      */
     public static int dot(Vector3D v1, Vector3D v2) {
@@ -97,10 +97,10 @@ public class Vector3D {
     /**
      * Calculates the cross product of this vector and the specified vector.
      * This is the same as calling {@link #cross(Vector3D, Vector3D)} with this
-     * object and {@code other}.
+     * object and {@code v}.
      *
-     * @param other the vector with which to take the cross product
-     * @throws NullPointerException if {@code other} is {@code null}
+     * @param v the vector with which to take the cross product
+     * @throws NullPointerException if {@code v} is {@code null}
      */
     public void cross(Vector3D v) {
         cross(this, v);
@@ -108,11 +108,11 @@ public class Vector3D {
 
     /**
      * Calculates the cross product of the two specified vectors.
-     * The result of {@code left x right} is stored in this object.
+     * The result of {@code u x v} is stored in this object.
      *
-     * @param left one of the vectors
-     * @param right the other vector
-     * @throws NullPointerException if {@code left} or {@code right} is
+     * @param u one of the vectors
+     * @param v the other vector
+     * @throws NullPointerException if {@code u} or {@code v} is
      *         {@code null}
      */
     public void cross(Vector3D u, Vector3D v) {
