@@ -218,7 +218,7 @@ public final class Software3DContext {
         float[] effectiveTransform = objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform);
         // UI `Primitive` keeps the palette-zero color-key bit in primitiveParam, unlike opt `PrimitiveArray`.
         // UI `graphics3d` primitive colors are RGB values; object transparency carries the alpha.
-        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam, 0, primitiveCount, vertexArray, colorArray, textureCoordArray, texture, effectiveTransform, projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true, (primitiveParam & 0x10) != 0, blendMode, transparency, false, false, true, true, uiFog, null, null, BlendSemantics.UI_GRAPHICS3D);
+        renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam, 0, primitiveCount, vertexArray, colorArray, textureCoordArray, null, texture, effectiveTransform, projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true, (primitiveParam & 0x10) != 0, blendMode, transparency, false, false, true, true, uiFog, null, null, BlendSemantics.UI_GRAPHICS3D);
     }
 
     public void renderOptFigure(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight, MascotFigure figure) {
@@ -282,7 +282,8 @@ public final class Software3DContext {
             return;
         }
         renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives.getType(), primitives.getParam(), start, count,
-                primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), texture, optViewTransform, projection, optClip,
+                primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), primitives.getPointSpriteArray(),
+                texture, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
                 optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, invertScreenY, true, true, null, sphereTexture, toonShader, BlendSemantics.FRAMEBUFFER);
     }
@@ -307,6 +308,7 @@ public final class Software3DContext {
                     pending.vertexArray(),
                     pending.colorArray(),
                     pending.textureCoordArray(),
+                    null,
                     pending.texture(),
                     pending.transform(),
                     pending.projection(),
@@ -463,7 +465,7 @@ public final class Software3DContext {
 
     private void renderPrimitiveBuffer(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                                        int primitiveType, int primitiveParam, int primitiveStart, int primitiveCount, int[] vertexArray,
-                                       int[] colorArray, int[] textureCoordArray, SoftwareTexture texture,
+                                       int[] colorArray, int[] textureCoordArray, int[] pointSpriteArray, SoftwareTexture texture,
                                        float[] transform, Projection projection, Rectangle clip,
                                        float centerX, float centerY, float orthoWidth, float orthoHeight,
                                        boolean allowBlend, boolean transparentPaletteZero, int blendMode, float transparency,
@@ -512,6 +514,42 @@ public final class Software3DContext {
                     // or >255 values before they wrap back into the 8-bit texture domain.
                     uv[i] = unsignedByteTextureCoords ? (coordinate & 0xFF) : coordinate;
                 }
+            }
+            if (primitiveType == com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES) {
+                float[] xs = new float[1];
+                float[] ys = new float[1];
+                float[] depthValues = new float[1];
+                float avgDepth;
+                float pointX = transformed[0];
+                float pointY = transformed[1];
+                float pointZ = transformed[2];
+                if (projection != null) {
+                    float cameraDepth = pointZ + projection.depthOffset();
+                    if (cameraDepth < projection.near() || cameraDepth > projection.far()) {
+                        continue;
+                    }
+                    float projectedX = pointX * projection.scaleX() / java.lang.Math.max(0.0001f, cameraDepth);
+                    float projectedY = pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth);
+                    xs[0] = originX + centerX + projectedX;
+                    ys[0] = projectScreenY(originY, centerY, projectedY, invertScreenY);
+                    depthValues[0] = 1.0f / java.lang.Math.max(0.0001f, cameraDepth);
+                    avgDepth = cameraDepth;
+                } else {
+                    xs[0] = originX + centerX + (pointX * (surfaceWidth / java.lang.Math.max(1f, orthoWidth)));
+                    ys[0] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), invertScreenY);
+                    depthValues[0] = -pointZ;
+                    avgDepth = pointZ;
+                }
+                int baseColor = colorForPrimitive(primitive, primitiveParam, colorArray);
+                if (opaqueRgbColors) {
+                    baseColor = normalizeOpaqueRgbColor(baseColor);
+                }
+                int color = scaleColor(baseColor, transparency, 1f);
+                addProjectedPointSprite(projected, primitiveParam, primitive, xs, ys, depthValues,
+                        projection, surfaceWidth, surfaceHeight, orthoWidth, orthoHeight,
+                        pointSpriteArray, color, avgDepth, texture, transparentPaletteZero,
+                        effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                continue;
             }
             if (projection != null) {
                 ClippedPolygon clipped = clipPerspectivePolygon(transformed, uv, projection, centerX, centerY, surfaceWidth, surfaceHeight);
@@ -569,6 +607,93 @@ public final class Software3DContext {
             }
         }
         drawProjected(g, target, projected, clip);
+    }
+
+    private static void addProjectedPointSprite(List<ProjectedPolygon> projected, int primitiveParam, int primitive,
+                                                float[] xs, float[] ys, float[] depthValues, Projection projection,
+                                                int surfaceWidth, int surfaceHeight, float orthoWidth, float orthoHeight,
+                                                int[] pointSpriteArray, int color, float depth, SoftwareTexture texture,
+                                                boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
+                                                FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
+        if (xs.length == 0 || ys.length == 0 || depthValues.length == 0 || texture == null) {
+            return;
+        }
+        int spriteBase = switch (primitiveParam & 0x3000) {
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_PER_COMMAND -> 0;
+            case com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_PER_VERTEX -> primitive * 8;
+            default -> -1;
+        };
+        if (spriteBase < 0 || pointSpriteArray == null || spriteBase + 8 > pointSpriteArray.length) {
+            return;
+        }
+        int widthParam = pointSpriteArray[spriteBase];
+        int heightParam = pointSpriteArray[spriteBase + 1];
+        int angleParam = pointSpriteArray[spriteBase + 2];
+        int textureU0 = pointSpriteArray[spriteBase + 3];
+        int textureV0 = pointSpriteArray[spriteBase + 4];
+        int textureU1 = pointSpriteArray[spriteBase + 5];
+        int textureV1 = pointSpriteArray[spriteBase + 6];
+        int flags = pointSpriteArray[spriteBase + 7];
+        if (textureU1 <= textureU0 || textureV1 <= textureV0) {
+            return;
+        }
+
+        boolean pixelSize = (flags & com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_PIXEL_SIZE) != 0;
+        boolean noPerspective = (flags & com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_NO_PERSPECTIVE) != 0;
+        float width;
+        float height;
+        if (projection != null) {
+            float cameraDepth = 1.0f / java.lang.Math.max(DEPTH_EPSILON, depthValues[0]);
+            if (pixelSize) {
+                float scale = noPerspective ? 1f : projection.near() / cameraDepth;
+                width = widthParam * scale;
+                height = heightParam * scale;
+            } else {
+                float referenceDepth = noPerspective ? projection.near() : cameraDepth;
+                width = widthParam * projection.scaleX() / java.lang.Math.max(DEPTH_EPSILON, referenceDepth);
+                height = heightParam * projection.scaleY() / java.lang.Math.max(DEPTH_EPSILON, referenceDepth);
+            }
+        } else if (pixelSize) {
+            width = widthParam;
+            height = heightParam;
+        } else {
+            width = widthParam * (surfaceWidth / java.lang.Math.max(1f, orthoWidth));
+            height = heightParam * (surfaceHeight / java.lang.Math.max(1f, orthoHeight));
+        }
+        if (width <= 0f || height <= 0f) {
+            return;
+        }
+
+        float centerX = xs[0];
+        float centerY = ys[0];
+        float halfWidth = width * 0.5f;
+        float halfHeight = height * 0.5f;
+        float radians = (float) (angleParam * java.lang.Math.PI / 2048.0);
+        float sin = (float) java.lang.Math.sin(radians);
+        float cos = (float) java.lang.Math.cos(radians);
+        float[] spriteXs = new float[4];
+        float[] spriteYs = new float[4];
+        rotateScreenPoint(centerX, centerY, -halfWidth, -halfHeight, cos, sin, spriteXs, spriteYs, 0);
+        rotateScreenPoint(centerX, centerY, halfWidth, -halfHeight, cos, sin, spriteXs, spriteYs, 1);
+        rotateScreenPoint(centerX, centerY, halfWidth, halfHeight, cos, sin, spriteXs, spriteYs, 2);
+        rotateScreenPoint(centerX, centerY, -halfWidth, halfHeight, cos, sin, spriteXs, spriteYs, 3);
+        float[] spriteDepths = new float[]{depthValues[0], depthValues[0], depthValues[0], depthValues[0]};
+        float[] spriteUvs = new float[]{
+                textureU0, textureV0,
+                textureU1, textureV0,
+                textureU1, textureV1,
+                textureU0, textureV1
+        };
+        // DoJa opt point sprites are center-anchored billboards encoded as:
+        // width, height, angle, u0, v0, u1, v1, flags.
+        addProjectedPrimitiveQuad(projected, spriteXs, spriteYs, spriteDepths, color, depth, texture, spriteUvs,
+                projection != null, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader);
+    }
+
+    private static void rotateScreenPoint(float centerX, float centerY, float localX, float localY,
+                                          float cos, float sin, float[] xs, float[] ys, int index) {
+        xs[index] = centerX + localX * cos - localY * sin;
+        ys[index] = centerY + localX * sin + localY * cos;
     }
 
     // The native opt perspective primitive helper at `micro3d_v3_32.dll:0x1000a180` stores
