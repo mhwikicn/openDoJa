@@ -274,7 +274,7 @@ public class PalettedImage extends Image {
         for (int y = 0, pos = 0; y < height; y++) {
             for (int x = 0; x < width; x++, pos++) {
                 int index = pixels[pos] & 0xFF;
-                int argb = palette.getEntry(index);
+                int argb = palette.getArgbEntry(index);
                 if (transparentEnabled && appliedTransparentIndex >= 0 && index == appliedTransparentIndex) {
                     argb &= 0x00FFFFFF;
                 }
