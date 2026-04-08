@@ -589,7 +589,7 @@ public class Font {
         // titles, openDoJa uses 10/12/16 here as an emulator policy rather than a literal DoJa
         // guarantee.
         return switch (logicalSize) {
-            case SIZE_SMALL -> 12; // TODO: Change to 10 once glyphs-10.dat support is implemented.
+            case SIZE_SMALL -> 10;
             case SIZE_MEDIUM -> 12;
             case SIZE_LARGE -> 16;
             // TINY is a DoJa-3-era addition, so older profiles fall back to the documented

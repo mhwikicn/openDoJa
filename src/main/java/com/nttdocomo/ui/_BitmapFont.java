@@ -14,16 +14,21 @@ import java.util.Map;
 /**
  * Bitmap font backend loaded from extracted handset glyph dumps.
  *
- * <p>The bundled dump was extracted from a n900i-series phone and is treated as the authoritative
- * source for this renderer. Thanks to Unabandonware (LNRC) for dumping the NOR, kagekiyo for
- * extracting the fonts (https://github.com/ZiplineGun/k/blob/main/extract_n900i_font.py) and
- * GuyPerfect for the initial version of this file.</p>
+ * <p>The bundled dump combines several handset sources and is treated as the authoritative source
+ * for this renderer: size 8 was extracted from an N503i, size 10 from an N504i, and sizes 12/16/
+ * 20/24/30 from a P902i. Thanks to Unabandonware (LNRC) for dumping the NOR, kagekiyo for
+ * extracting the fonts (https://github.com/ZiplineGun/k/blob/main/extract_n900i_font.py),
+ * GuyPerfect for the initial version of this file, and PoogieCharger for creating the updated
+ * bitmap font set that fixed earlier issues and added the 8px and 10px strikes.</p>
  *
  * <p>Each size has a {@code code-points.dat} table plus one raw glyph-bitmap file. The code-point
  * table is a list of 16-bit little-endian Unicode values in the same order as the glyphs appear in
- * the bitmap file. The glyph file name encodes the bitmap height, and the stored bitmap width is
- * the smallest multiple of eight that is at least that height. Every bit is one pixel with the
- * left-most pixel in the MSB; set bits are foreground pixels and cleared bits are transparent.</p>
+ * the bitmap file. Some entries are {@code U+FFFD} placeholders because the original handset table
+ * contains glyphs that do not map cleanly to Unicode, and some smaller strikes can truncate the
+ * tail of the shared table. The glyph file name encodes the bitmap height, and the stored bitmap
+ * width is the smallest multiple of eight that is at least that height. Every bit is one pixel
+ * with the left-most pixel in the MSB; set bits are foreground pixels and cleared bits are
+ * transparent.</p>
  *
  * <p>The dump also distinguishes half-width code points from full-width ones, so layout here keeps
  * the handset width rules while blitting only the visible half-width columns. Baseline/ascent
@@ -32,7 +37,7 @@ import java.util.Map;
  */
 class _BitmapFont extends Font {
     private static final String RESOURCE_ROOT = "/opendoja/fonts/bitmap/";
-    private static final int[] SUPPORTED_SIZES = {12, 16, 20, 24, 30};
+    private static final int[] SUPPORTED_SIZES = {8, 10, 12, 16, 20, 24, 30};
     private static final int QUESTION_MARK = 0x003F;
     private static final int SPACE = 0x0020;
     private static final int IDEOGRAPHIC_SPACE = 0x3000;
@@ -288,11 +293,15 @@ class _BitmapFont extends Font {
                 int width = deriveWidth(height);
                 int bytesPerRow = width / 8;
                 int bytesPerGlyph = bytesPerRow * height;
-                if (glyphData.length != codePoints.length * bytesPerGlyph) {
+                if ((glyphData.length % bytesPerGlyph) != 0) {
                     throw new IOException("Unexpected glyph file length for height " + height);
                 }
-                Map<Integer, Integer> codePointToGlyph = new HashMap<>(codePoints.length * 2);
-                for (int i = 0; i < codePoints.length; i++) {
+                int glyphCount = glyphData.length / bytesPerGlyph;
+                if (glyphCount > codePoints.length) {
+                    throw new IOException("Glyph table for height " + height + " exceeds code-point table");
+                }
+                Map<Integer, Integer> codePointToGlyph = new HashMap<>(glyphCount * 2);
+                for (int i = 0; i < glyphCount; i++) {
                     codePointToGlyph.put(codePoints[i], i);
                 }
                 int questionMarkIndex = codePointToGlyph.getOrDefault(QUESTION_MARK, -1);
