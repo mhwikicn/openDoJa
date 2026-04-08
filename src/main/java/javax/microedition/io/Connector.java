@@ -52,18 +52,18 @@ public class Connector {
     }
 
     public static DataInputStream openDataInputStream(String name) throws IOException {
-        return new DataInputStream(openInputStream(name));
+        return asDataInputStream(openInputStream(name));
     }
 
     public static DataOutputStream openDataOutputStream(String name) throws IOException {
-        return new DataOutputStream(openOutputStream(name));
+        return asDataOutputStream(openOutputStream(name));
     }
 
     public static InputStream openInputStream(String name) throws IOException {
         String lower = name.toLowerCase(Locale.ROOT);
         if (lower.startsWith("resource:///")) {
             try {
-                return DoJaRuntime.openLaunchResourceStream(name);
+                return asDataInputStream(DoJaRuntime.openLaunchResourceStream(name));
             } catch (FileNotFoundException e) {
                 ConnectionNotFoundException missing = new ConnectionNotFoundException(e.getMessage());
                 missing.initCause(e);
@@ -79,10 +79,10 @@ public class Connector {
                 throw new ConnectionNotFoundException("ScratchPad is not configured for this application");
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
-            return runtime.openScratchpadInput(location.index(), location.position(), location.length());
+            return asDataInputStream(runtime.openScratchpadInput(location.index(), location.position(), location.length()));
         }
         if (lower.startsWith("http://") || lower.startsWith("https://")) {
-            return ((DesktopHttpConnection) open(name, READ, false)).openInputStream();
+            return asDataInputStream(((DesktopHttpConnection) open(name, READ, false)).openInputStream());
         }
         throw new ConnectionNotFoundException("Unsupported input connector URI: " + name);
     }
@@ -98,16 +98,24 @@ public class Connector {
                 throw new ConnectionNotFoundException("ScratchPad is not configured for this application");
             }
             ScratchpadLocation location = ScratchpadLocation.parse(name);
-            return runtime.openScratchpadOutput(location.index(), location.position(), location.length());
+            return asDataOutputStream(runtime.openScratchpadOutput(location.index(), location.position(), location.length()));
         }
         if (lower.startsWith("http://") || lower.startsWith("https://")) {
-            return ((DesktopHttpConnection) open(name, READ_WRITE, false)).openOutputStream();
+            return asDataOutputStream(((DesktopHttpConnection) open(name, READ_WRITE, false)).openOutputStream());
         }
         throw new ConnectionNotFoundException("Unsupported output connector URI: " + name);
     }
 
     private static OutputStream noOutput() {
         return null;
+    }
+
+    private static DataInputStream asDataInputStream(InputStream input) {
+        return input instanceof DataInputStream dataInput ? dataInput : new DataInputStream(input);
+    }
+
+    private static DataOutputStream asDataOutputStream(OutputStream output) {
+        return output instanceof DataOutputStream dataOutput ? dataOutput : new DataOutputStream(output);
     }
 
     private record ScratchpadLocation(int index, long position, long length) {
@@ -161,7 +169,7 @@ public class Connector {
 
         @Override
         public DataInputStream openDataInputStream() {
-            return new DataInputStream(input);
+            return asDataInputStream(input);
         }
 
         @Override
@@ -174,7 +182,7 @@ public class Connector {
 
         @Override
         public DataOutputStream openDataOutputStream() throws IOException {
-            return new DataOutputStream(openOutputStream());
+            return asDataOutputStream(openOutputStream());
         }
 
         @Override
