@@ -746,18 +746,9 @@ public final class DoJaRuntime {
     }
 
     private String launchMicroeditionProfiles() {
-        String profileVer = config.parameters().get("ProfileVer");
-        DoJaProfile configured = DoJaProfile.parse(profileVer);
-        if (configured.isKnown()) {
-            return configured.toString();
-        }
-        // Older JAMs sometimes omit ProfileVer, but some titles still branch on
-        // microedition.profiles during startup. When the launch metadata still identifies the
-        // handset family, expose the documented runtime profile for that family; otherwise fall
-        // back to the empty string so callers never hit a null property value.
-        DoJaProfile documented = DoJaProfile.fromDocumentedDeviceIdentity(launchDeviceIdentity());
-        if (documented.isKnown()) {
-            return documented.toString();
+        DoJaProfile resolved = DoJaProfile.fromParametersOrDocumentedDeviceIdentity(config.parameters());
+        if (resolved.isKnown()) {
+            return resolved.toString();
         }
         return "";
     }

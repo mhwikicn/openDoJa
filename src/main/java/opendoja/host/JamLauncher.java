@@ -11,8 +11,13 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class JamLauncher {
+    private static final Pattern DEVICE_HINT_PATTERN = Pattern.compile(
+            "(?i)(?:^|[^A-Za-z0-9])((?:FOMA\\s+)?[A-Z]?[0-9]{3,4}i?[A-Z]?(?:S|V|C)?)(?:[^A-Za-z0-9]|$)");
+
     private JamLauncher() {
     }
 
@@ -35,7 +40,7 @@ public final class JamLauncher {
         if (appClassName == null || appClassName.isBlank()) {
             throw new IllegalArgumentException("JAM/ADF missing AppClass: " + jamPath);
         }
-        Class<?> rawClass = Class.forName(appClassName.trim());
+        Class<?> rawClass = loadApplicationClass(appClassName.trim());
         if (!IApplication.class.isAssignableFrom(rawClass)) {
             throw new IllegalArgumentException("AppClass does not extend IApplication: " + appClassName);
         }
@@ -63,6 +68,10 @@ public final class JamLauncher {
         }
         for (String name : properties.stringPropertyNames()) {
             builder.parameter(name, properties.getProperty(name));
+        }
+        String inferredTargetDevice = inferTargetDevice(jamPath, properties);
+        if (inferredTargetDevice != null && !properties.containsKey("TargetDevice")) {
+            builder.parameter("TargetDevice", inferredTargetDevice);
         }
         if (scratchpad != null && !scratchpad.found()) {
             ResolvedScratchpad missingScratchpad = scratchpad;
@@ -119,6 +128,33 @@ public final class JamLauncher {
         return resolved.toUri().toString();
     }
 
+    private static String inferTargetDevice(Path jamPath, Properties properties) {
+        String configured = properties.getProperty("TargetDevice");
+        if (configured != null && !configured.isBlank()) {
+            return configured.trim();
+        }
+        String inferred = firstDeviceHint(jamPath.toString());
+        if (inferred != null) {
+            return inferred;
+        }
+        String packageUrl = properties.getProperty("PackageURL");
+        if (packageUrl != null && !packageUrl.isBlank()) {
+            return firstDeviceHint(packageUrl);
+        }
+        return null;
+    }
+
+    private static String firstDeviceHint(String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return null;
+        }
+        Matcher matcher = DEVICE_HINT_PATTERN.matcher(candidate);
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(1).trim();
+    }
+
     private static URI normalizePackageUri(URI packageUri) {
         String path = packageUri.getPath();
         if (!isJarName(lastPathSegment(path))) {
@@ -159,6 +195,14 @@ public final class JamLauncher {
     private static String toDirectoryUri(Path directory) {
         String uri = directory.toUri().toString();
         return uri.endsWith("/") ? uri : uri + "/";
+    }
+
+    private static Class<?> loadApplicationClass(String className) throws ClassNotFoundException {
+        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+        if (contextLoader != null) {
+            return Class.forName(className, false, contextLoader);
+        }
+        return Class.forName(className, false, JamLauncher.class.getClassLoader());
     }
 
     private static Properties loadJamProperties(Path jamPath) throws IOException {

@@ -59,7 +59,7 @@ public final class DoJaProfile {
     }
 
     public static DoJaProfile fromRuntime(DoJaRuntime runtime) {
-        return runtime == null ? UNKNOWN : fromParameters(runtime.parameters());
+        return runtime == null ? UNKNOWN : fromParametersOrDocumentedDeviceIdentity(runtime.parameters());
     }
 
     public static DoJaProfile fromParameters(Map<String, String> parameters) {
@@ -67,6 +67,30 @@ public final class DoJaProfile {
             return UNKNOWN;
         }
         return parse(parameters.get("ProfileVer"));
+    }
+
+    /**
+     * Resolves the runtime profile from launch parameters, falling back to documented handset
+     * identity when older JAMs omit {@code ProfileVer} but still expose a recognizable device
+     * series through {@code TargetDevice} or {@code PackageURL}.
+     */
+    public static DoJaProfile fromParametersOrDocumentedDeviceIdentity(Map<String, String> parameters) {
+        DoJaProfile configured = fromParameters(parameters);
+        if (configured.isKnown()) {
+            return configured;
+        }
+        if (parameters == null) {
+            return UNKNOWN;
+        }
+        String targetDevice = parameters.get("TargetDevice");
+        if (targetDevice != null && !targetDevice.isBlank()) {
+            return fromDocumentedDeviceIdentity(targetDevice);
+        }
+        String packageUrl = parameters.get("PackageURL");
+        if (packageUrl != null && !packageUrl.isBlank()) {
+            return fromDocumentedDeviceIdentity(packageUrl);
+        }
+        return UNKNOWN;
     }
 
     public static DoJaProfile fromDocumentedDeviceIdentity(String deviceIdentity) {

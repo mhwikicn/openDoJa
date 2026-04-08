@@ -38,7 +38,10 @@ public final class DesktopLauncher {
         if (args.length == 0) {
             throw new IllegalArgumentException("Usage: DesktopLauncher <fully.qualified.IApplicationClass> [args...]");
         }
-        Class<?> rawClass = Class.forName(args[0]);
+        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+        Class<?> rawClass = contextLoader == null
+                ? Class.forName(args[0], false, DesktopLauncher.class.getClassLoader())
+                : Class.forName(args[0], false, contextLoader);
         if (!IApplication.class.isAssignableFrom(rawClass)) {
             throw new IllegalArgumentException(args[0] + " does not extend com.nttdocomo.ui.IApplication");
         }

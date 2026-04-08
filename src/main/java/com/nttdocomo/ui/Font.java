@@ -1,6 +1,8 @@
 package com.nttdocomo.ui;
 
 import com.nttdocomo.lang.XString;
+import opendoja.host.DoJaProfile;
+import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLaunchArgs;
 import opendoja.host.LaunchConfig;
 
@@ -105,7 +107,9 @@ public class Font {
 
     private static final BufferedImage METRICS_IMAGE = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
     private static volatile Set<String> availableFamilies;
-    private static Font defaultFont = createFont(FACE_SYSTEM, STYLE_PLAIN, decodeSize(SIZE_TINY));
+    private static volatile Font defaultFont;
+    private static volatile int defaultFontLogicalSize;
+    private static volatile boolean defaultFontCustomized;
 
     private final java.awt.Font awtFont;
     private java.awt.FontMetrics metrics;
@@ -141,7 +145,21 @@ public class Font {
      * @return the default-font object
      */
     public static Font getDefaultFont() {
-        return defaultFont;
+        if (defaultFontCustomized) {
+            return defaultFont;
+        }
+        int logicalSize = decodeSize(defaultLogicalSizeConstant());
+        Font current = defaultFont;
+        if (current != null && defaultFontLogicalSize == logicalSize) {
+            return current;
+        }
+        synchronized (Font.class) {
+            if (!defaultFontCustomized && (defaultFont == null || defaultFontLogicalSize != logicalSize)) {
+                defaultFont = createFont(FACE_SYSTEM, STYLE_PLAIN, logicalSize);
+                defaultFontLogicalSize = logicalSize;
+            }
+            return defaultFont;
+        }
     }
 
     /**
@@ -157,6 +175,7 @@ public class Font {
             throw new NullPointerException("font");
         }
         defaultFont = font;
+        defaultFontCustomized = true;
     }
 
     /**
@@ -534,12 +553,64 @@ public class Font {
     private static int decodeSize(int value) {
         int normalized = (value & 0x0000FF00) == 0 ? value : (0x70000000 | (value & 0x0000FF00));
         return switch (normalized) {
+            case SIZE_TINY, SIZE_SMALL, SIZE_MEDIUM, SIZE_LARGE -> resolveLogicalSize(normalized);
+            default -> value > 0 && value < 256 ? value : resolveLogicalSize(defaultLogicalSizeConstant());
+        };
+    }
+
+    private static int defaultLogicalSizeConstant() {
+        return useLegacyBitmapLogicalSizes() ? SIZE_MEDIUM : SIZE_TINY;
+    }
+
+    private static int resolveLogicalSize(int logicalSize) {
+        if (useLegacyBitmapLogicalSizes()) {
+            return resolveLegacyLogicalSize(logicalSize);
+        }
+        return switch (logicalSize) {
             case SIZE_TINY -> 12;
             case SIZE_SMALL -> 16;
             case SIZE_MEDIUM -> 24;
             case SIZE_LARGE -> 30;
-            default -> value > 0 && value < 256 ? value : 24;
+            default -> 24;
         };
+    }
+
+    private static int resolveLegacyLogicalSize(int logicalSize) {
+        // Compatibility heuristic for pre-DoJa-3 profiles:
+        // - The official DoJa 3.0 guide says DoJa-1.0/2.0 support SIZE_MEDIUM as the default size,
+        //   with DoJa-2.0 low-level default text at 12 dots and DoJa-1.0/default-plus-other-font
+        //   support varying by manufacturer:
+        //   https://www.nttdocomo.co.jp/english/binary/pdf/service/developer/make/content/iappli/technical_data/doja/jguideforDoJa3_0_E.pdf
+        //   (page 67, font notes).
+        // - https://web.archive.org/web/20041101013339/http://www.nttdocomo.co.jp/p_s/imode/spec/info.html shows 12-dot default fonts across the
+        //   shipped DoJa-2.x examples and many DoJa-1.0 examples, but it does not define one
+        //   universal SMALL/MEDIUM/LARGE ladder.
+        // To stay game- and device-agnostic while still exposing three distinct rungs for older
+        // titles, openDoJa uses 10/12/16 here as an emulator policy rather than a literal DoJa
+        // guarantee.
+        return switch (logicalSize) {
+            case SIZE_SMALL -> 12; // TODO: Change to 10 once glyphs-10.dat support is implemented.
+            case SIZE_MEDIUM -> 12;
+            case SIZE_LARGE -> 16;
+            // TINY is a DoJa-3-era addition, so older profiles fall back to the documented
+            // default medium size instead of inventing a smaller legacy rung.
+            case SIZE_TINY -> 12;
+            default -> 12;
+        };
+    }
+
+    private static DoJaProfile currentProfile() {
+        DoJaRuntime runtime = DoJaRuntime.current();
+        return runtime == null ? DoJaProfile.UNKNOWN
+                : DoJaProfile.fromParametersOrDocumentedDeviceIdentity(runtime.parameters());
+    }
+
+    private static boolean useLegacyBitmapLogicalSizes() {
+        if (!BITMAP_FONT_ENABLED) {
+            return false;
+        }
+        DoJaProfile profile = currentProfile();
+        return profile.isKnown() && profile.isBefore(3, 0);
     }
 
     private static int resolveDesktopPointSize(int face, java.awt.Font baseFont, int awtStyle, int logicalSize) {
