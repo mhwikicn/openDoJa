@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
+import opendoja.host.LaunchEncodingSupport;
 import opendoja.host.OpenDoJaLaunchArgs;
 
 final class LauncherProcessSupport {
@@ -46,6 +47,7 @@ final class LauncherProcessSupport {
         }
         Set<String> overriddenProperties = appendForwardedProperties(command, System.getProperties(), settings);
         appendLauncherSettings(command, settings, overriddenProperties);
+        appendFileEncoding(command);
         command.add("-cp");
         command.add(resolveLauncherArtifact() + File.pathSeparator + selection.gameJarPath());
         command.add(OpenDoJaLauncher.class.getName());
@@ -103,6 +105,14 @@ final class LauncherProcessSupport {
             overriddenProperties.add(name);
         }
         command.add("-D" + name + "=" + value);
+    }
+
+    private void appendFileEncoding(List<String> command) {
+        String fileEncoding = LaunchEncodingSupport.childProcessFileEncoding();
+        if (fileEncoding == null || fileEncoding.isBlank()) {
+            return;
+        }
+        command.add("-Dfile.encoding=" + fileEncoding);
     }
 
     private Path resolveLauncherArtifact() throws IOException {

@@ -146,24 +146,10 @@ final class LaunchCompatibility {
     }
 
     private static String targetDefaultEncoding() {
-        if (explicitFileEncodingArgument() != null) {
+        if (LaunchEncodingSupport.hasExplicitFileEncodingArgument()) {
             return null;
         }
-        String override = OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.DEFAULT_ENCODING, null);
-        if (override != null) {
-            String value = override.trim();
-            return value.isEmpty() ? null : value;
-        }
-        return DoJaEncoding.defaultCharsetName();
-    }
-
-    private static String explicitFileEncodingArgument() {
-        for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-            if (arg.startsWith("-Dfile.encoding=")) {
-                return arg.substring("-Dfile.encoding=".length());
-            }
-        }
-        return null;
+        return LaunchEncodingSupport.configuredDefaultEncoding();
     }
 
     private static boolean shouldDisableExplicitGc() {
