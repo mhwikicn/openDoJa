@@ -106,6 +106,9 @@ public class Primitive extends DrawableObject3D {
     private Texture texture;
     private boolean textureWrapEnabled;
     private TextureCoordinateTransform textureCoordinateTransform = TextureCoordinateTransform.IDENTITY;
+    private boolean depthTestEnabled = true;
+    private boolean depthWriteEnabled = true;
+    private boolean doubleSided = true;
 
     /**
      * Creates a primitive object with the specified type, parameter flags, and
@@ -330,5 +333,29 @@ public class Primitive extends DrawableObject3D {
     float textureCoordinateTranslateV() {
         SoftwareTexture handle = textureHandle();
         return handle == null ? 0f : textureCoordinateTransform.pixelTranslationV(getTime(), handle.height());
+    }
+
+    void setDepthTestEnabled(boolean depthTestEnabled) {
+        this.depthTestEnabled = depthTestEnabled;
+    }
+
+    boolean depthTestEnabled() {
+        return depthTestEnabled;
+    }
+
+    void setDepthWriteEnabled(boolean depthWriteEnabled) {
+        this.depthWriteEnabled = depthWriteEnabled;
+    }
+
+    boolean depthWriteEnabled() {
+        return depthWriteEnabled;
+    }
+
+    void setDoubleSided(boolean doubleSided) {
+        this.doubleSided = doubleSided;
+    }
+
+    boolean doubleSided() {
+        return doubleSided;
     }
 }

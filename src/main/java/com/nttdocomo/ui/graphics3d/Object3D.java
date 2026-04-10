@@ -125,6 +125,10 @@ public abstract class Object3D {
                         primitive.setTextureWrapEnabled(loadedPrimitive.textureWrapEnabled());
                         primitive.setTextureCoordinateTransform(loadedPrimitive.textureCoordinateTransform());
                     }
+                    primitive.setBlendMode(loadedPrimitive.blendMode());
+                    primitive.setDepthTestEnabled(loadedPrimitive.depthTestEnabled());
+                    primitive.setDepthWriteEnabled(loadedPrimitive.depthWriteEnabled());
+                    primitive.setDoubleSided(loadedPrimitive.doubleSided());
                     group.addElement(primitive);
                 }
                 return group;

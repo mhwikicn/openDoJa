@@ -54,7 +54,10 @@ public final class TexturedVertexModulationProbe {
                     1f,
                     false,
                     0f,
-                    0f
+                    0f,
+                    true,
+                    true,
+                    true
             );
         } finally {
             graphics.dispose();

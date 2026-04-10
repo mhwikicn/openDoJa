@@ -215,7 +215,8 @@ public final class Software3DContext {
                                   int primitiveType, int primitiveParam, int primitiveCount, int[] vertexArray, int[] colorArray,
                                   int[] textureCoordArray, SoftwareTexture texture, float[] objectTransform, int blendMode,
                                   float transparency, boolean wrapTextureCoords,
-                                  float textureTranslateU, float textureTranslateV) {
+                                  float textureTranslateU, float textureTranslateV,
+                                  boolean depthTest, boolean depthWrite, boolean doubleSided) {
         Projection projection = uiPerspective ? createUiProjection(surfaceWidth, surfaceHeight) : null;
         float[] effectiveTransform = objectTransform == null ? uiTransform : multiply(uiTransform, objectTransform);
         // UI `Primitive` keeps the palette-zero color-key bit in primitiveParam, unlike opt `PrimitiveArray`.
@@ -227,7 +228,8 @@ public final class Software3DContext {
                 0, primitiveCount, vertexArray, colorArray, textureCoordArray, null, texture, effectiveTransform,
                 projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true,
                 (primitiveParam & 0x10) != 0, blendMode, transparency, false, false, true, true,
-                uiFog, null, null, textureTranslateU, textureTranslateV, BlendSemantics.UI_GRAPHICS3D);
+                uiFog, null, null, textureTranslateU, textureTranslateV, depthTest, depthWrite, doubleSided,
+                BlendSemantics.UI_GRAPHICS3D);
     }
 
     public void renderOptFigure(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight, MascotFigure figure) {
@@ -295,7 +297,7 @@ public final class Software3DContext {
                 texture, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
                 optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, invertScreenY, true, true,
-                null, sphereTexture, toonShader, 0f, 0f, BlendSemantics.FRAMEBUFFER);
+                null, sphereTexture, toonShader, 0f, 0f, true, true, true, BlendSemantics.FRAMEBUFFER);
     }
 
     public void flushPendingOptPrimitiveBlends(Graphics2D g, BufferedImage target) {
@@ -340,6 +342,9 @@ public final class Software3DContext {
                     pending.toonShader(),
                     0f,
                     0f,
+                    true,
+                    true,
+                    true,
                     BlendSemantics.FRAMEBUFFER);
         }
         pendingOptPrimitiveBlends.clear();
@@ -463,7 +468,7 @@ public final class Software3DContext {
                     addProjectedFaces(projected, xs, ys, depthValues, modulationColor, avgDepth, polygonTexture, textureCoords,
                             null,
                             projection != null, polygon.doubleSided() || !CULL_FIGURES, polygon.transparent(),
-                            effectiveBlendOp, true, fog, sphereTexture, toonShader);
+                            effectiveBlendOp, true, true, fog, sphereTexture, toonShader);
                 }
                 continue;
             }
@@ -475,7 +480,8 @@ public final class Software3DContext {
             } else {
                 addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null,
                         null,
-                        projection != null, polygon.doubleSided() || !CULL_FIGURES, false, effectiveBlendOp, true, fog, sphereTexture, toonShader);
+                        projection != null, polygon.doubleSided() || !CULL_FIGURES, false, effectiveBlendOp, true,
+                        true, fog, sphereTexture, toonShader);
             }
         }
         if (DEBUG_3D && !debugFigureStatsLogged && projection != null && model.polygons().length >= 200) {
@@ -499,7 +505,9 @@ public final class Software3DContext {
                                        boolean allowBlend, boolean transparentPaletteZero, int blendMode, float transparency,
                                        boolean unsignedByteTextureCoords, boolean invertScreenY, boolean opaqueRgbColors, boolean depthWrite,
                                        FogState fog, SoftwareTexture sphereTexture, ToonShaderParams defaultToonShader,
-                                       float textureTranslateU, float textureTranslateV, BlendSemantics blendSemantics) {
+                                       float textureTranslateU, float textureTranslateV, boolean depthTest,
+                                       boolean effectiveDepthWrite, boolean doubleSided,
+                                       BlendSemantics blendSemantics) {
         if (vertexArray == null) {
             return;
         }
@@ -515,6 +523,7 @@ public final class Software3DContext {
         int effectiveBlendMode = allowBlend ? blendMode : 0;
         BlendOp effectiveBlendOp = resolveBlendMode(effectiveBlendMode, blendSemantics);
         ToonShaderParams toonShader = resolveToonShader(texture, defaultToonShader);
+        boolean writeDepth = depthWrite && effectiveDepthWrite;
         List<ProjectedPolygon> projected = new ArrayList<>();
         for (int primitive = start; primitive < end; primitive++) {
             boolean internalVertexColors = (primitiveParam & 0x0C00) == com.nttdocomo.ui.graphics3d.Primitive.COLOR_PER_VERTEX_INTERNAL;
@@ -596,7 +605,7 @@ public final class Software3DContext {
                 addProjectedPointSprite(projected, primitiveParam, primitive, xs, ys, depthValues,
                         projection, surfaceWidth, surfaceHeight, orthoWidth, orthoHeight,
                         pointSpriteArray, color, avgDepth, texture, transparentPaletteZero,
-                        effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                        effectiveBlendOp, depthTest, writeDepth, fog, sphereTexture, toonShader);
                 continue;
             }
             if (projection != null) {
@@ -641,25 +650,28 @@ public final class Software3DContext {
             if (texture != null && vertexCount >= 3 && uv != null) {
                 if (primitiveType == 4 && vertexCount == 4) {
                     addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, texture, uv,
-                            vertexModulationColors, projection != null, transparentPaletteZero, effectiveBlendOp, depthWrite,
+                            vertexModulationColors, projection != null, transparentPaletteZero, effectiveBlendOp,
+                            depthTest, writeDepth,
                             fog, sphereTexture, toonShader);
                 } else {
                     addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, uv,
-                            vertexModulationColors, projection != null, true, transparentPaletteZero, effectiveBlendOp, depthWrite,
-                            fog, sphereTexture, toonShader);
+                            vertexModulationColors, projection != null, doubleSided, transparentPaletteZero,
+                            effectiveBlendOp, depthTest, writeDepth, fog, sphereTexture, toonShader);
                 }
                 continue;
             }
             if (primitiveType == 2) {
                 projected.add(new ProjectedPolygon(xs, ys, depthValues, color, avgDepth, false, null, null,
-                        null, false, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader));
+                        null, false, false, effectiveBlendOp, depthTest, writeDepth, fog, sphereTexture, toonShader));
             } else {
                 if (primitiveType == 4 && vertexCount == 4) {
                     addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, null, null,
-                            null, projection != null, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                            null, projection != null, false, effectiveBlendOp, depthTest, writeDepth,
+                            fog, sphereTexture, toonShader);
                 } else {
                     addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null,
-                            null, projection != null, true, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                            null, projection != null, doubleSided, false, effectiveBlendOp, depthTest,
+                            writeDepth, fog, sphereTexture, toonShader);
                 }
             }
         }
@@ -670,8 +682,9 @@ public final class Software3DContext {
                                                 float[] xs, float[] ys, float[] depthValues, Projection projection,
                                                 int surfaceWidth, int surfaceHeight, float orthoWidth, float orthoHeight,
                                                 int[] pointSpriteArray, int color, float depth, SoftwareTexture texture,
-                                                boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
-                                                FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
+                                                boolean transparentPaletteZero, BlendOp blendOp, boolean depthTest,
+                                                boolean depthWrite, FogState fog, SoftwareTexture sphereTexture,
+                                                ToonShaderParams toonShader) {
         if (xs.length == 0 || ys.length == 0 || depthValues.length == 0 || texture == null) {
             return;
         }
@@ -744,7 +757,8 @@ public final class Software3DContext {
         // DoJa opt point sprites are center-anchored billboards encoded as:
         // width, height, angle, u0, v0, u1, v1, flags.
         addProjectedPrimitiveQuad(projected, spriteXs, spriteYs, spriteDepths, color, depth, texture, spriteUvs,
-                null, projection != null, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader);
+                null, projection != null, transparentPaletteZero, blendOp, depthTest, depthWrite, fog, sphereTexture,
+                toonShader);
     }
 
     private static void rotateScreenPoint(float centerX, float centerY, float localX, float localY,
@@ -781,8 +795,9 @@ public final class Software3DContext {
     private static void addProjectedPrimitiveQuad(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues,
                                                   int color, float depth, SoftwareTexture texture, float[] textureCoords,
                                                   float[] vertexModulationColors,
-                                                  boolean perspective, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
-                                                  FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
+                                                  boolean perspective, boolean transparentPaletteZero, BlendOp blendOp,
+                                                  boolean depthTest, boolean depthWrite, FogState fog,
+                                                  SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
         addProjectedTriangle(projected,
                 new float[]{xs[0], xs[1], xs[2]},
                 new float[]{ys[0], ys[1], ys[2]},
@@ -808,6 +823,7 @@ public final class Software3DContext {
                 true,
                 transparentPaletteZero,
                 blendOp,
+                depthTest,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -837,6 +853,7 @@ public final class Software3DContext {
                 true,
                 transparentPaletteZero,
                 blendOp,
+                depthTest,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -870,6 +887,7 @@ public final class Software3DContext {
                 doubleSided,
                 transparentPaletteZero,
                 blendOp,
+                true,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -893,6 +911,7 @@ public final class Software3DContext {
                 doubleSided,
                 transparentPaletteZero,
                 blendOp,
+                true,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -901,8 +920,9 @@ public final class Software3DContext {
 
     private static void addProjectedFaces(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues, int color, float depth,
                                           SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
-                                          boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
-                                          FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
+                                          boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp,
+                                          boolean depthTest, boolean depthWrite, FogState fog,
+                                          SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
         if (xs.length < 3) {
             return;
         }
@@ -935,6 +955,7 @@ public final class Software3DContext {
                     doubleSided,
                     transparentPaletteZero,
                     blendOp,
+                    depthTest,
                     depthWrite,
                     fog,
                     sphereTexture,
@@ -944,10 +965,12 @@ public final class Software3DContext {
 
     private static void addProjectedTriangle(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues, int color, float depth,
                                              SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
-                                             boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
-                                             FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
+                                             boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp,
+                                             boolean depthTest, boolean depthWrite, FogState fog,
+                                             SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
         projected.add(new ProjectedPolygon(xs, ys, depthValues, color, depth, true, texture, textureCoords,
-                vertexModulationColors, perspective, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader));
+                vertexModulationColors, perspective, transparentPaletteZero, blendOp, depthTest, depthWrite, fog,
+                sphereTexture, toonShader));
     }
 
     private static ClippedPolygon clipPerspectivePolygon(float[] points, float[] textureCoords, float[] vertexModulationColors, Projection projection,
@@ -1149,7 +1172,8 @@ public final class Software3DContext {
                                     vertexModulationColors[i * 4], vertexModulationColors[i * 4 + 1], vertexModulationColors[i * 4 + 2], vertexModulationColors[i * 4 + 3],
                                     vertexModulationColors[(i + 1) * 4], vertexModulationColors[(i + 1) * 4 + 1], vertexModulationColors[(i + 1) * 4 + 2], vertexModulationColors[(i + 1) * 4 + 3]
                             },
-                    polygon.transparentPaletteZero(), polygon.blendMode(), polygon.depthWrite(), polygon.fog(), polygon.sphereTexture(), polygon.toonShader(),
+                    polygon.transparentPaletteZero(), polygon.blendMode(), polygon.depthTest(), polygon.depthWrite(),
+                    polygon.fog(), polygon.sphereTexture(), polygon.toonShader(),
                     polygon.xs()[0], polygon.ys()[0], uvs[0], uvs[1],
                     polygon.depthValues()[0],
                     polygon.xs()[i], polygon.ys()[i], uvs[i * 2], uvs[i * 2 + 1],
@@ -1166,7 +1190,8 @@ public final class Software3DContext {
             return;
         }
         for (int i = 1; i < vertexCount - 1; i++) {
-            drawColoredTriangle(target, clip, depthBuffer, polygon.color(), polygon.blendMode(), polygon.depthWrite(), polygon.perspective(), polygon.fog(), polygon.sphereTexture(), polygon.toonShader(),
+            drawColoredTriangle(target, clip, depthBuffer, polygon.color(), polygon.blendMode(), polygon.depthTest(),
+                    polygon.depthWrite(), polygon.perspective(), polygon.fog(), polygon.sphereTexture(), polygon.toonShader(),
                     polygon.xs()[0], polygon.ys()[0], depthValues[0],
                     polygon.xs()[i], polygon.ys()[i], depthValues[i],
                     polygon.xs()[i + 1], polygon.ys()[i + 1], depthValues[i + 1]);
@@ -1174,8 +1199,9 @@ public final class Software3DContext {
     }
 
     private static void drawTexturedTriangle(BufferedImage target, Rectangle clip, float[] depthBuffer, SoftwareTexture texture, int modulationColor,
-                                             boolean perspective, float[] vertexModulationColors, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
-                                             FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader,
+                                             boolean perspective, float[] vertexModulationColors, boolean transparentPaletteZero,
+                                             BlendOp blendOp, boolean depthTest, boolean depthWrite, FogState fog,
+                                             SoftwareTexture sphereTexture, ToonShaderParams toonShader,
                                              float x0, float y0, float u0, float v0, float d0,
                                              float x1, float y1, float u1, float v1, float d1,
                                              float x2, float y2, float u2, float v2, float d2) {
@@ -1234,7 +1260,7 @@ public final class Software3DContext {
                 float w2 = edge(x0, y0, x1, y1, px, py) / area;
                 float depth = d0 * w0 + d1 * w1 + d2 * w2;
                 int offset = y * target.getWidth() + x;
-                if (depth < depthBuffer[offset] - DEPTH_EPSILON) {
+                if (depthTest && depth < depthBuffer[offset] - DEPTH_EPSILON) {
                     continue;
                 }
                 float u;
@@ -1266,8 +1292,9 @@ public final class Software3DContext {
         }
     }
 
-    private static void drawColoredTriangle(BufferedImage target, Rectangle clip, float[] depthBuffer, int color, BlendOp blendOp, boolean depthWrite,
-                                            boolean perspective, FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader,
+    private static void drawColoredTriangle(BufferedImage target, Rectangle clip, float[] depthBuffer, int color, BlendOp blendOp,
+                                            boolean depthTest, boolean depthWrite, boolean perspective, FogState fog,
+                                            SoftwareTexture sphereTexture, ToonShaderParams toonShader,
                                             float x0, float y0, float d0,
                                             float x1, float y1, float d1,
                                             float x2, float y2, float d2) {
@@ -1326,7 +1353,7 @@ public final class Software3DContext {
                 float w2 = edge(x0, y0, x1, y1, px, py) / area;
                 float depth = d0 * w0 + d1 * w1 + d2 * w2;
                 int offset = y * target.getWidth() + x;
-                if (depth < depthBuffer[offset] - DEPTH_EPSILON) {
+                if (depthTest && depth < depthBuffer[offset] - DEPTH_EPSILON) {
                     continue;
                 }
                 int shadedColor = applySphereMap(color, sphereTexture, target.getWidth(), target.getHeight(), x, y);
@@ -1791,7 +1818,7 @@ public final class Software3DContext {
 
     private record ProjectedPolygon(float[] xs, float[] ys, float[] depthValues, int color, float depth, boolean closed,
                                     SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
-                                    boolean transparentPaletteZero, BlendOp blendMode, boolean depthWrite,
+                                    boolean transparentPaletteZero, BlendOp blendMode, boolean depthTest, boolean depthWrite,
                                     FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
     }
 

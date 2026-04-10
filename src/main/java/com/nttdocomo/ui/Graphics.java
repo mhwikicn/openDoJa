@@ -1566,7 +1566,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                     objectMatrix, invokeHiddenInt(object, "blendModeValue"), invokeHiddenFloat(object, "transparencyValue"),
                     invokeHiddenBoolean(primitive, "textureWrapEnabled"),
                     invokeHiddenFloat(primitive, "textureCoordinateTranslateU"),
-                    invokeHiddenFloat(primitive, "textureCoordinateTranslateV"));
+                    invokeHiddenFloat(primitive, "textureCoordinateTranslateV"),
+                    invokeHiddenBoolean(primitive, "depthTestEnabled"),
+                    invokeHiddenBoolean(primitive, "depthWriteEnabled"),
+                    invokeHiddenBoolean(primitive, "doubleSided"));
         }
     }
 

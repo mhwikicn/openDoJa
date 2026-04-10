@@ -1,5 +1,6 @@
 package opendoja.g3d;
 
+import com.nttdocomo.ui.graphics3d.DrawableObject3D;
 import com.nttdocomo.ui.graphics3d.Primitive;
 import com.nttdocomo.ui.util3d.Transform;
 
@@ -18,6 +19,9 @@ import java.util.Map;
 public final class D4ObjectLoader {
     private static final int M3G_KEYFRAME_LINEAR = 0xB0;
     private static final int M3G_REPEAT_LOOP = 0xC1;
+    private static final int M3G_CULL_NONE = 0xA2;
+    private static final int M3G_ALPHA_BLEND = 0x40;
+    private static final int M3G_ALPHA_ADD = 0x41;
     private static final int M3G_WRAP_REPEAT = 0xF1;
     private static final int M3G_ANIM_TRANSLATION = 275;
 
@@ -260,30 +264,23 @@ public final class D4ObjectLoader {
     }
 
     private static D4MeshDescriptor decodeMeshDescriptor(D4Object object, Map<Integer, D4Object> objects) {
-        int textureBindingId = -1;
-        int textureFlagsId = -1;
-        for (int offset = 0; offset + 3 < object.payload.length; offset += 4) {
-            int ref = decodeShift8Ref(littleInt(object.payload, offset));
-            D4Object target = objects.get(ref);
-            if (target == null) {
-                continue;
-            }
-            if (target.type == 6 && textureFlagsId < 0) {
-                textureFlagsId = ref;
-            } else if (target.type == 17 && textureBindingId < 0) {
-                textureBindingId = ref;
-            }
-        }
+        D4Appearance appearance = decodeAppearance(object);
+        int textureFlagsId = appearance.compositingModeId;
+        int textureBindingId = appearance.textureId;
         D4TextureBinding textureBinding = null;
         if (textureBindingId >= 0) {
             textureBinding = decodeTextureBinding(objects.get(textureBindingId), objects);
         }
+        D4CompositingMode compositingMode = decodeCompositingMode(objects.get(appearance.compositingModeId));
+        D4PolygonMode polygonMode = decodePolygonMode(objects.get(appearance.polygonModeId));
         boolean textureWrapEnabled = textureBinding == null
                 ? decodeTextureWrapEnabled(objects.get(textureFlagsId))
                 : textureBinding.wrapS && textureBinding.wrapT;
         int primitiveType = object.payload.length == 0 ? Primitive.PRIMITIVE_TRIANGLES
                 : unsigned(object.payload[object.payload.length - 1]);
-        return new D4MeshDescriptor(textureBinding, primitiveType, textureWrapEnabled);
+        return new D4MeshDescriptor(textureBinding, primitiveType, textureWrapEnabled,
+                compositingMode.blendMode, compositingMode.depthTestEnabled, compositingMode.depthWriteEnabled,
+                polygonMode.doubleSided);
     }
 
     private static DecodedPrimitive buildPrimitive(D4IndexSet indexSet, D4MeshDescriptor descriptor,
@@ -348,7 +345,8 @@ public final class D4ObjectLoader {
         }
         return new DecodedPrimitive(primitiveParam, vertices, colors, uvs,
                 textureData == null ? null : textureData.texture, descriptor.textureWrapEnabled,
-                descriptor.textureBinding == null ? TextureCoordinateTransform.IDENTITY : descriptor.textureBinding.textureCoordinateTransform);
+                descriptor.textureBinding == null ? TextureCoordinateTransform.IDENTITY : descriptor.textureBinding.textureCoordinateTransform,
+                descriptor.blendMode, descriptor.depthTestEnabled, descriptor.depthWriteEnabled, descriptor.doubleSided);
     }
 
     private static void writeVertex(int[] target, int offset, D4Array positions, int index) {
@@ -398,6 +396,57 @@ public final class D4ObjectLoader {
         // Treat that pair as the container's repeat flag and keep the behavior internal to
         // the loader instead of exposing a public API change.
         return littleShort(object.payload, 8) == 0x0101;
+    }
+
+    private static D4Appearance decodeAppearance(D4Object object) {
+        if (object == null || object.type != 3) {
+            return D4Appearance.DEFAULT;
+        }
+        D4ObjectData objectData = decodeObjectData(object);
+        int offset = objectData.payloadOffset;
+        if (offset + 21 > object.payload.length) {
+            return D4Appearance.DEFAULT;
+        }
+        int compositingModeId = decodePlainRef(littleInt(object.payload, offset + 1));
+        int polygonModeId = decodePlainRef(littleInt(object.payload, offset + 9));
+        int textureCount = littleInt(object.payload, offset + 17);
+        int textureId = -1;
+        if (textureCount > 0 && offset + 25 <= object.payload.length) {
+            textureId = decodePlainRef(littleInt(object.payload, offset + 21));
+        }
+        return new D4Appearance(compositingModeId, polygonModeId, textureId);
+    }
+
+    private static D4CompositingMode decodeCompositingMode(D4Object object) {
+        if (object == null || object.type != 6) {
+            return D4CompositingMode.DEFAULT;
+        }
+        D4ObjectData objectData = decodeObjectData(object);
+        int offset = objectData.payloadOffset;
+        if (offset + 6 > object.payload.length) {
+            return D4CompositingMode.DEFAULT;
+        }
+        int blendMode = switch (unsigned(object.payload[offset + 4])) {
+            case M3G_ALPHA_BLEND -> DrawableObject3D.BLEND_ALPHA;
+            case M3G_ALPHA_ADD -> DrawableObject3D.BLEND_ADD;
+            default -> DrawableObject3D.BLEND_NORMAL;
+        };
+        return new D4CompositingMode(
+                unsigned(object.payload[offset]) != 0,
+                unsigned(object.payload[offset + 1]) != 0,
+                blendMode);
+    }
+
+    private static D4PolygonMode decodePolygonMode(D4Object object) {
+        if (object == null || object.type != 8) {
+            return D4PolygonMode.DEFAULT;
+        }
+        D4ObjectData objectData = decodeObjectData(object);
+        int offset = objectData.payloadOffset;
+        if (offset + 1 > object.payload.length) {
+            return D4PolygonMode.DEFAULT;
+        }
+        return new D4PolygonMode(unsigned(object.payload[offset]) == M3G_CULL_NONE);
     }
 
     private static int scaleTextureCoord(int encoded, int textureSize, float bias, float scale) {
@@ -696,10 +745,25 @@ public final class D4ObjectLoader {
     private record D4IndexSet(int[] indices, int[] lengths) {
     }
 
-    private record D4MeshDescriptor(D4TextureBinding textureBinding, int primitiveType, boolean textureWrapEnabled) {
+    private record D4MeshDescriptor(D4TextureBinding textureBinding, int primitiveType, boolean textureWrapEnabled,
+                                    int blendMode, boolean depthTestEnabled, boolean depthWriteEnabled,
+                                    boolean doubleSided) {
     }
 
     private record D4TextureData(SoftwareTexture texture, boolean transparentPaletteZero) {
+    }
+
+    private record D4Appearance(int compositingModeId, int polygonModeId, int textureId) {
+        private static final D4Appearance DEFAULT = new D4Appearance(-1, -1, -1);
+    }
+
+    private record D4CompositingMode(boolean depthTestEnabled, boolean depthWriteEnabled, int blendMode) {
+        private static final D4CompositingMode DEFAULT = new D4CompositingMode(true, true,
+                DrawableObject3D.BLEND_NORMAL);
+    }
+
+    private record D4PolygonMode(boolean doubleSided) {
+        private static final D4PolygonMode DEFAULT = new D4PolygonMode(true);
     }
 
     private record D4TextureBinding(int textureId, boolean wrapS, boolean wrapT,
@@ -714,6 +778,8 @@ public final class D4ObjectLoader {
 
     public record DecodedPrimitive(int primitiveParam, int[] vertices, int[] colors, int[] textureCoords,
                                    SoftwareTexture textureHandle, boolean textureWrapEnabled,
-                                   TextureCoordinateTransform textureCoordinateTransform) {
+                                   TextureCoordinateTransform textureCoordinateTransform,
+                                   int blendMode, boolean depthTestEnabled, boolean depthWriteEnabled,
+                                   boolean doubleSided) {
     }
 }

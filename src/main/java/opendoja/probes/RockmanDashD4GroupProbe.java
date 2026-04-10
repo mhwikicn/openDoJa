@@ -1,5 +1,6 @@
 package opendoja.probes;
 
+import com.nttdocomo.ui.graphics3d.DrawableObject3D;
 import com.nttdocomo.ui.graphics3d.Group;
 import com.nttdocomo.ui.graphics3d.Object3D;
 import com.nttdocomo.ui.graphics3d.Primitive;
@@ -29,21 +30,21 @@ public final class RockmanDashD4GroupProbe {
     private static final float TEXTURE_TRANSLATION_EPSILON = 0.02f;
     private static final ExpectedPrimitive[] EXPECTED_PRIMITIVES = {
             new ExpectedPrimitive(128, 128, 1, 126, 0, 100, new int[]{1, 17, 63, 17, 63, 74},
-                    new int[]{0xffffffff, 0xffffffff, 0xffbfbfbf}, 102, 0),
+                    new int[]{0xffffffff, 0xffffffff, 0xffbfbfbf}, 102, 0, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(64, 64, 0, 64, -58, 134, new int[]{0, -58, 0, 134, 64, 134},
-                    new int[]{0xffc0c0c0, 0xffc0c0c0, 0xffc0c0c0}, 12, 0),
+                    new int[]{0xffc0c0c0, 0xffc0c0c0, 0xffc0c0c0}, 12, 0, DrawableObject3D.BLEND_ALPHA),
             new ExpectedPrimitive(256, 256, -512, 768, -448, 256, new int[]{0, 256, 0, 128, 256, 128},
-                    new int[]{0xffbf7f3f, 0xffbf7f3f, 0xffbf7f3f}, 2317, 0),
+                    new int[]{0xffbf7f3f, 0xffbf7f3f, 0xffbf7f3f}, 2317, 0, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(128, 128, 0, 128, 0, 128, new int[]{96, 128, 83, 128, 83, 11},
-                    new int[]{0xffffbf7f, 0xffffbf7f, 0xff8c8c8c}, 798, 0),
+                    new int[]{0xffffbf7f, 0xffffbf7f, 0xff8c8c8c}, 798, 0, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(32, 32, -224, 224, -144, 208, new int[]{128, 112, 128, 48, 32, -48},
-                    new int[]{0x6c999999, 0x6cffffff, 0x6cffffff}, 477, 477),
+                    new int[]{0x6c999999, 0x6cffffff, 0x6cffffff}, 477, 477, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(32, 32, -240, 240, -160, 224, new int[]{-48, -128, -32, 160, -32, -96},
-                    new int[]{0x0cffbf7f, 0x6cff7e18, 0x6cff7e18}, 2063, 1743),
+                    new int[]{0x0cffbf7f, 0x6cff7e18, 0x6cff7e18}, 2063, 1743, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(64, 64, 0, 26, 45, 63, new int[]{26, 63, 0, 63, 13, 45},
-                    new int[]{0xffbf5959, 0xffbf5959, 0xffffffff}, 108, 0),
+                    new int[]{0xffbf5959, 0xffbf5959, 0xffffffff}, 108, 0, DrawableObject3D.BLEND_NORMAL),
             new ExpectedPrimitive(32, 32, -103, 103, -128, 271, new int[]{-48, -64, 0, -12, 48, -64},
-                    new int[]{0xff000000, 0xffffffff, 0xffffffff}, 251, 0)
+                    new int[]{0xff000000, 0xffffffff, 0xffffffff}, 251, 0, DrawableObject3D.BLEND_ADD)
     };
 
     private RockmanDashD4GroupProbe() {
@@ -71,6 +72,14 @@ public final class RockmanDashD4GroupProbe {
         textureHandle.setAccessible(true);
         Method textureWrapEnabled = Primitive.class.getDeclaredMethod("textureWrapEnabled");
         textureWrapEnabled.setAccessible(true);
+        Method blendModeValue = DrawableObject3D.class.getDeclaredMethod("blendModeValue");
+        blendModeValue.setAccessible(true);
+        Method depthTestEnabled = Primitive.class.getDeclaredMethod("depthTestEnabled");
+        depthTestEnabled.setAccessible(true);
+        Method depthWriteEnabled = Primitive.class.getDeclaredMethod("depthWriteEnabled");
+        depthWriteEnabled.setAccessible(true);
+        Method doubleSided = Primitive.class.getDeclaredMethod("doubleSided");
+        doubleSided.setAccessible(true);
         Method textureCoordinateTranslateU = Primitive.class.getDeclaredMethod("textureCoordinateTranslateU");
         textureCoordinateTranslateU.setAccessible(true);
         Method textureCoordinateTranslateV = Primitive.class.getDeclaredMethod("textureCoordinateTranslateV");
@@ -90,7 +99,8 @@ public final class RockmanDashD4GroupProbe {
                 verifyTextureHasOpaquePixels(i, texture);
                 verifiedTextures.put(texture, Boolean.TRUE);
             }
-            verifyDecodedPrimitive(i, primitive, texture, textureWrapEnabled);
+            verifyDecodedPrimitive(i, primitive, texture, textureWrapEnabled, blendModeValue,
+                    depthTestEnabled, depthWriteEnabled, doubleSided);
             primitiveCount++;
             triangleCount += primitive.size();
         }
@@ -127,7 +137,9 @@ public final class RockmanDashD4GroupProbe {
     }
 
     private static void verifyDecodedPrimitive(int primitiveIndex, Primitive primitive, SoftwareTexture texture,
-                                               Method textureWrapEnabled) throws Exception {
+                                               Method textureWrapEnabled, Method blendModeValue,
+                                               Method depthTestEnabled, Method depthWriteEnabled,
+                                               Method doubleSided) throws Exception {
         ExpectedPrimitive expected = EXPECTED_PRIMITIVES[primitiveIndex];
         if (texture.width() != expected.textureWidth || texture.height() != expected.textureHeight) {
             throw new IllegalStateException("Primitive " + primitiveIndex + " texture size mismatch: "
@@ -135,6 +147,18 @@ public final class RockmanDashD4GroupProbe {
         }
         if (!Boolean.TRUE.equals(textureWrapEnabled.invoke(primitive))) {
             throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 texture wrap flag");
+        }
+        if (((Number) blendModeValue.invoke(primitive)).intValue() != expected.blendMode) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " blend mode mismatch");
+        }
+        if (!Boolean.TRUE.equals(depthTestEnabled.invoke(primitive))) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 depth-test flag");
+        }
+        if (!Boolean.TRUE.equals(depthWriteEnabled.invoke(primitive))) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 depth-write flag");
+        }
+        if (!Boolean.FALSE.equals(doubleSided.invoke(primitive))) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 back-face culling mode");
         }
         int[] uvs = primitive.getTextureCoordArray();
         if (uvs == null) {
@@ -275,6 +299,6 @@ public final class RockmanDashD4GroupProbe {
 
     private record ExpectedPrimitive(int textureWidth, int textureHeight, int minU, int maxU, int minV, int maxV,
                                      int[] firstTriangleUvs, int[] firstTriangleColors,
-                                     int nonWhiteVertexColors, int translucentVertexColors) {
+                                     int nonWhiteVertexColors, int translucentVertexColors, int blendMode) {
     }
 }
