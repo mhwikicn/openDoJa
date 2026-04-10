@@ -57,7 +57,7 @@ public final class DesktopHttpConnection implements HttpConnection {
         ensureConnection();
         logRequestIfNeeded();
         try {
-            InputStream stream = connection.getInputStream();
+            InputStream stream = normalizeResponseInputStream(connection.getInputStream());
             logResponseIfNeeded();
             return stream;
         } catch (IOException exception) {
@@ -277,6 +277,10 @@ public final class DesktopHttpConnection implements HttpConnection {
         return new UserIdRewriteOutputStream(delegate);
     }
 
+    private static InputStream normalizeResponseInputStream(InputStream delegate) {
+        return new ReliableInputStream(delegate);
+    }
+
     private void debug(java.util.function.Supplier<String> messageSupplier) {
         OpenDoJaLog.debug(DesktopHttpConnection.class, messageSupplier);
     }
@@ -344,6 +348,34 @@ public final class DesktopHttpConnection implements HttpConnection {
 
     private static String valueOrUnset(String value) {
         return value == null || value.isBlank() ? "<unset>" : value;
+    }
+
+    private static final class ReliableInputStream extends java.io.FilterInputStream {
+        private ReliableInputStream(InputStream delegate) {
+            super(delegate);
+        }
+
+        @Override
+        public int read(byte[] buffer, int offset, int length) throws IOException {
+            if (length == 0) {
+                return 0;
+            }
+            // InputStream.read(byte[], int, int) may legally return fewer bytes than requested even when
+            // more data will arrive later. Some DoJa titles treat one read as "the whole response", so we
+            // keep reading until the caller's buffer is full or EOF while preserving the usual 0/-1 cases.
+            int totalRead = 0;
+            while (totalRead < length) {
+                int count = super.read(buffer, offset + totalRead, length - totalRead);
+                if (count < 0) {
+                    return totalRead == 0 ? -1 : totalRead;
+                }
+                totalRead += count;
+                if (count == 0) {
+                    break;
+                }
+            }
+            return totalRead;
+        }
     }
 
     private static final class UserIdRewriteOutputStream extends FilterOutputStream {
