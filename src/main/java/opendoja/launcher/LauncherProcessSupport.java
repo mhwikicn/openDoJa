@@ -2,7 +2,6 @@ package opendoja.launcher;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
@@ -109,16 +108,7 @@ final class LauncherProcessSupport {
     }
 
     private void appendFileEncoding(List<String> command) {
-        String fileEncoding = explicitFileEncodingArgument();
-        if (fileEncoding == null) {
-            String override = OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.DEFAULT_ENCODING, null);
-            if (override != null) {
-                String value = override.trim();
-                if (!value.isEmpty()) {
-                    fileEncoding = value;
-                }
-            }
-        }
+        String fileEncoding = DoJaEncoding.explicitFileEncodingLaunchArgument();
         if (fileEncoding == null) {
             fileEncoding = DoJaEncoding.defaultCharsetName();
         }
@@ -126,16 +116,6 @@ final class LauncherProcessSupport {
             return;
         }
         command.add("-Dfile.encoding=" + fileEncoding);
-    }
-
-    private String explicitFileEncodingArgument() {
-        for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
-            if (arg.startsWith("-Dfile.encoding=")) {
-                String value = arg.substring("-Dfile.encoding=".length()).trim();
-                return value.isEmpty() ? null : value;
-            }
-        }
-        return null;
     }
 
     private Path resolveLauncherArtifact() throws IOException {

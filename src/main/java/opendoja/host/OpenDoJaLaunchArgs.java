@@ -72,8 +72,6 @@ public final class OpenDoJaLaunchArgs {
     public static final String DEBUG_FUE_TREK_CONTROL = "opendoja.debugFueTrekControl";
     /** Enables FueTrek note debug logging. */
     public static final String DEBUG_FUE_TREK_NOTES = "opendoja.debugFueTrekNotes";
-    /** Default charset used for DoJa text decoding. */
-    public static final String DEFAULT_ENCODING = "opendoja.defaultEncoding";
     /** Whether to draw the host handset frame. */
     public static final String EXTERNAL_FRAME = "opendoja.externalFrame";
     /** Disables external FeliCa speed discovery. */
@@ -276,7 +274,6 @@ public final class OpenDoJaLaunchArgs {
             DEBUG3D_CALLS,
             DEBUG_FUE_TREK_CONTROL,
             DEBUG_FUE_TREK_NOTES,
-            DEFAULT_ENCODING,
             EXTERNAL_FRAME,
             FELICA_EXTERNAL_NO_SPEED_DISCOVERY,
             FELICA_EXTERNAL_POLLED_IDM,
@@ -497,7 +494,6 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(DEBUG3D_CALLS, () -> "false");
         defaults.put(DEBUG_FUE_TREK_CONTROL, () -> "false");
         defaults.put(DEBUG_FUE_TREK_NOTES, () -> "false");
-        defaults.put(DEFAULT_ENCODING, DoJaEncoding::defaultCharsetName);
         defaults.put(EXTERNAL_FRAME, () -> "true");
         defaults.put(FELICA_EXTERNAL_NO_SPEED_DISCOVERY, () -> "false");
         defaults.put(FELICA_EXTERNAL_POLLED_IDM, () -> "");

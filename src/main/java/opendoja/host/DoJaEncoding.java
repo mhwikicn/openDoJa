@@ -1,5 +1,6 @@
 package opendoja.host;
 
+import java.lang.management.ManagementFactory;
 import java.nio.charset.Charset;
 import java.util.List;
 
@@ -27,6 +28,9 @@ public final class DoJaEncoding {
     }
 
     private static Charset resolveDefaultCharset() {
+        if (explicitFileEncodingLaunchArgument() != null) {
+            return Charset.defaultCharset();
+        }
         for (String candidate : DEFAULT_ENCODING_CANDIDATES) {
             try {
                 return Charset.forName(candidate);
@@ -34,5 +38,17 @@ public final class DoJaEncoding {
             }
         }
         return Charset.defaultCharset();
+    }
+
+    public static String explicitFileEncodingLaunchArgument() {
+        for (String arg : ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+            if (arg.startsWith("-Dfile.encoding=")) {
+                String value = arg.substring("-Dfile.encoding=".length()).trim();
+                if (!value.isEmpty()) {
+                    return value;
+                }
+            }
+        }
+        return null;
     }
 }
