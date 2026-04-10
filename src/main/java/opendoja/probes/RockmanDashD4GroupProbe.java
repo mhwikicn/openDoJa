@@ -80,8 +80,6 @@ public final class RockmanDashD4GroupProbe {
         depthWriteEnabled.setAccessible(true);
         Method doubleSided = Primitive.class.getDeclaredMethod("doubleSided");
         doubleSided.setAccessible(true);
-        Method preciseTextureCoordArray = Primitive.class.getDeclaredMethod("preciseTextureCoordArray");
-        preciseTextureCoordArray.setAccessible(true);
         Method textureCoordinateTranslateU = Primitive.class.getDeclaredMethod("textureCoordinateTranslateU");
         textureCoordinateTranslateU.setAccessible(true);
         Method textureCoordinateTranslateV = Primitive.class.getDeclaredMethod("textureCoordinateTranslateV");
@@ -102,7 +100,7 @@ public final class RockmanDashD4GroupProbe {
                 verifiedTextures.put(texture, Boolean.TRUE);
             }
             verifyDecodedPrimitive(i, primitive, texture, textureWrapEnabled, blendModeValue,
-                    depthTestEnabled, depthWriteEnabled, doubleSided, preciseTextureCoordArray);
+                    depthTestEnabled, depthWriteEnabled, doubleSided);
             primitiveCount++;
             triangleCount += primitive.size();
         }
@@ -141,7 +139,7 @@ public final class RockmanDashD4GroupProbe {
     private static void verifyDecodedPrimitive(int primitiveIndex, Primitive primitive, SoftwareTexture texture,
                                                Method textureWrapEnabled, Method blendModeValue,
                                                Method depthTestEnabled, Method depthWriteEnabled,
-                                               Method doubleSided, Method preciseTextureCoordArray) throws Exception {
+                                               Method doubleSided) throws Exception {
         ExpectedPrimitive expected = EXPECTED_PRIMITIVES[primitiveIndex];
         if (texture.width() != expected.textureWidth || texture.height() != expected.textureHeight) {
             throw new IllegalStateException("Primitive " + primitiveIndex + " texture size mismatch: "
@@ -184,16 +182,6 @@ public final class RockmanDashD4GroupProbe {
         if (!Arrays.equals(firstTriangle, expected.firstTriangleUvs)) {
             throw new IllegalStateException("Primitive " + primitiveIndex + " first triangle UV mismatch: "
                     + Arrays.toString(firstTriangle));
-        }
-        float[] preciseUvs = (float[]) preciseTextureCoordArray.invoke(primitive);
-        if (preciseUvs == null || preciseUvs.length != uvs.length) {
-            throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 precise texture coordinates");
-        }
-        if (primitiveIndex == 3) {
-            assertClose("primitive 3 precise U0", preciseUvs[0], 96.008789f, TEXTURE_TRANSLATION_EPSILON);
-            assertClose("primitive 3 precise V0", preciseUvs[1], 128.003959f, TEXTURE_TRANSLATION_EPSILON);
-            assertClose("primitive 3 precise U2", preciseUvs[4], 83.205664f, TEXTURE_TRANSLATION_EPSILON);
-            assertClose("primitive 3 precise V2", preciseUvs[5], 10.871478f, TEXTURE_TRANSLATION_EPSILON);
         }
         if ((primitive.getPrimitiveParam() & 0x0C00) != Primitive.COLOR_PER_VERTEX_INTERNAL) {
             throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 per-vertex color mode");

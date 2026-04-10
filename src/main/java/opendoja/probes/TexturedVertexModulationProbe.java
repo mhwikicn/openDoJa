@@ -49,7 +49,6 @@ public final class TexturedVertexModulationProbe {
                             0, 0
                     },
                     makeWhiteTexture(),
-                    null,
                     Software3DContext.identity(),
                     0,
                     1f,

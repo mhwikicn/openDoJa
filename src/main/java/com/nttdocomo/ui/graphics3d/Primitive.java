@@ -106,7 +106,6 @@ public class Primitive extends DrawableObject3D {
     private Texture texture;
     private boolean textureWrapEnabled;
     private TextureCoordinateTransform textureCoordinateTransform = TextureCoordinateTransform.IDENTITY;
-    private float[] preciseTextureCoordArray;
     private boolean depthTestEnabled = true;
     private boolean depthWriteEnabled = true;
     private boolean doubleSided = true;
@@ -334,14 +333,6 @@ public class Primitive extends DrawableObject3D {
     float textureCoordinateTranslateV() {
         SoftwareTexture handle = textureHandle();
         return handle == null ? 0f : textureCoordinateTransform.pixelTranslationV(getTime(), handle.height());
-    }
-
-    void setPreciseTextureCoordArray(float[] preciseTextureCoordArray) {
-        this.preciseTextureCoordArray = preciseTextureCoordArray == null ? null : preciseTextureCoordArray.clone();
-    }
-
-    float[] preciseTextureCoordArray() {
-        return preciseTextureCoordArray;
     }
 
     void setDepthTestEnabled(boolean depthTestEnabled) {

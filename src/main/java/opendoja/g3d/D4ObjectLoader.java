@@ -318,7 +318,6 @@ public final class D4ObjectLoader {
         int[] uvs = (primitiveParam & 0x3000) == Primitive.TEXTURE_COORD_PER_VERTEX
                 ? new int[triangleCount * 6]
                 : null;
-        float[] preciseUvs = uvs == null ? null : new float[triangleCount * 6];
         int cursor = 0;
         int triangle = 0;
         for (int length : indexSet.lengths) {
@@ -336,15 +335,15 @@ public final class D4ObjectLoader {
                     writeColor(colors, triangle * 3 + 2, arrays.colors, indexSet.indices[cursor + i + 1]);
                 }
                 if (uvs != null) {
-                    writeUv(uvs, preciseUvs, triangle * 6, arrays.uvs, first, textureData, arrays);
-                    writeUv(uvs, preciseUvs, triangle * 6 + 2, arrays.uvs, indexSet.indices[cursor + i], textureData, arrays);
-                    writeUv(uvs, preciseUvs, triangle * 6 + 4, arrays.uvs, indexSet.indices[cursor + i + 1], textureData, arrays);
+                    writeUv(uvs, triangle * 6, arrays.uvs, first, textureData, arrays);
+                    writeUv(uvs, triangle * 6 + 2, arrays.uvs, indexSet.indices[cursor + i], textureData, arrays);
+                    writeUv(uvs, triangle * 6 + 4, arrays.uvs, indexSet.indices[cursor + i + 1], textureData, arrays);
                 }
                 triangle++;
             }
             cursor += length;
         }
-        return new DecodedPrimitive(primitiveParam, vertices, colors, uvs, preciseUvs,
+        return new DecodedPrimitive(primitiveParam, vertices, colors, uvs,
                 textureData == null ? null : textureData.texture, descriptor.textureWrapEnabled,
                 descriptor.textureBinding == null ? TextureCoordinateTransform.IDENTITY : descriptor.textureBinding.textureCoordinateTransform,
                 descriptor.blendMode, descriptor.depthTestEnabled, descriptor.depthWriteEnabled, descriptor.doubleSided);
@@ -360,8 +359,8 @@ public final class D4ObjectLoader {
         target[offset + 2] = positions.values[source + 2];
     }
 
-    private static void writeUv(int[] target, float[] preciseTarget, int offset, D4Array uvs, int index,
-                                D4TextureData textureData, D4MeshArrays arrays) {
+    private static void writeUv(int[] target, int offset, D4Array uvs, int index, D4TextureData textureData,
+                                D4MeshArrays arrays) {
         int source = index * uvs.components;
         if (source + 1 >= uvs.values.length) {
             return;
@@ -369,18 +368,12 @@ public final class D4ObjectLoader {
         if (textureData == null) {
             target[offset] = uvs.values[source];
             target[offset + 1] = uvs.values[source + 1];
-            if (preciseTarget != null) {
-                preciseTarget[offset] = target[offset];
-                preciseTarget[offset + 1] = target[offset + 1];
-            }
             return;
         }
-        preciseTarget[offset] = preciseTextureCoord(uvs.values[source], textureData.texture.width(),
+        target[offset] = scaleTextureCoord(uvs.values[source], textureData.texture.width(),
                 arrays.texCoordBiasU, arrays.texCoordScale);
-        preciseTarget[offset + 1] = preciseTextureCoord(uvs.values[source + 1], textureData.texture.height(),
+        target[offset + 1] = scaleTextureCoord(uvs.values[source + 1], textureData.texture.height(),
                 arrays.texCoordBiasV, arrays.texCoordScale);
-        target[offset] = java.lang.Math.round(preciseTarget[offset]);
-        target[offset + 1] = java.lang.Math.round(preciseTarget[offset + 1]);
     }
 
     private static void writeColor(int[] target, int offset, D4Array colors, int index) {
@@ -456,8 +449,8 @@ public final class D4ObjectLoader {
         return new D4PolygonMode(unsigned(object.payload[offset]) == M3G_CULL_NONE);
     }
 
-    private static float preciseTextureCoord(int encoded, int textureSize, float bias, float scale) {
-        return (bias + encoded * scale) * textureSize;
+    private static int scaleTextureCoord(int encoded, int textureSize, float bias, float scale) {
+        return java.lang.Math.round((bias + encoded * scale) * textureSize);
     }
 
     private static Transform groupTransformOf(D4MeshArrays arrays) {
@@ -784,7 +777,6 @@ public final class D4ObjectLoader {
     }
 
     public record DecodedPrimitive(int primitiveParam, int[] vertices, int[] colors, int[] textureCoords,
-                                   float[] preciseTextureCoords,
                                    SoftwareTexture textureHandle, boolean textureWrapEnabled,
                                    TextureCoordinateTransform textureCoordinateTransform,
                                    int blendMode, boolean depthTestEnabled, boolean depthWriteEnabled,

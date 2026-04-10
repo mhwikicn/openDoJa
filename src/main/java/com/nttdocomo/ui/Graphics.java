@@ -1563,7 +1563,6 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             threeD.renderUiPrimitive(delegate, surface.image(), originX, originY, surface.width(), surface.height(),
                     primitive.getPrimitiveType(), primitive.getPrimitiveParam(), primitive.size(),
                     primitive.getVertexArray(), primitive.getColorArray(), primitive.getTextureCoordArray(), texture,
-                    invokeHidden(primitive, "preciseTextureCoordArray", float[].class),
                     objectMatrix, invokeHiddenInt(object, "blendModeValue"), invokeHiddenFloat(object, "transparencyValue"),
                     invokeHiddenBoolean(primitive, "textureWrapEnabled"),
                     invokeHiddenFloat(primitive, "textureCoordinateTranslateU"),
