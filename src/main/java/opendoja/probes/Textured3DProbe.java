@@ -45,6 +45,7 @@ public final class Textured3DProbe {
                             0, 0
                     },
                     makeTexture(),
+                    null,
                     Software3DContext.identity(),
                     0,
                     1f,

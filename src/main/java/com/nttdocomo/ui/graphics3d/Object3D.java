@@ -119,6 +119,7 @@ public abstract class Object3D {
                     if (loadedPrimitive.textureCoords() != null) {
                         System.arraycopy(loadedPrimitive.textureCoords(), 0, primitive.getTextureCoordArray(), 0,
                                 loadedPrimitive.textureCoords().length);
+                        primitive.setPreciseTextureCoordArray(loadedPrimitive.preciseTextureCoords());
                     }
                     if (loadedPrimitive.textureHandle() != null) {
                         primitive.setTexture(new Texture(loadedPrimitive.textureHandle()));

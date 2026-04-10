@@ -213,8 +213,8 @@ public final class Software3DContext {
 
     public void renderUiPrimitive(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                                   int primitiveType, int primitiveParam, int primitiveCount, int[] vertexArray, int[] colorArray,
-                                  int[] textureCoordArray, SoftwareTexture texture, float[] objectTransform, int blendMode,
-                                  float transparency, boolean wrapTextureCoords,
+                                  int[] textureCoordArray, SoftwareTexture texture, float[] preciseTextureCoordArray,
+                                  float[] objectTransform, int blendMode, float transparency, boolean wrapTextureCoords,
                                   float textureTranslateU, float textureTranslateV,
                                   boolean depthTest, boolean depthWrite, boolean doubleSided) {
         Projection projection = uiPerspective ? createUiProjection(surfaceWidth, surfaceHeight) : null;
@@ -225,7 +225,7 @@ public final class Software3DContext {
             texture.setRepeatEnabled(wrapTextureCoords);
         }
         renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam,
-                0, primitiveCount, vertexArray, colorArray, textureCoordArray, null, texture, effectiveTransform,
+                0, primitiveCount, vertexArray, colorArray, textureCoordArray, preciseTextureCoordArray, null, texture, effectiveTransform,
                 projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true,
                 (primitiveParam & 0x10) != 0, blendMode, transparency, false, false, true, true,
                 uiFog, null, null, textureTranslateU, textureTranslateV, depthTest, depthWrite, doubleSided,
@@ -293,7 +293,7 @@ public final class Software3DContext {
             return;
         }
         renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitives.getType(), primitives.getParam(), start, count,
-                primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), primitives.getPointSpriteArray(),
+                primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), null, primitives.getPointSpriteArray(),
                 texture, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
                 optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, invertScreenY, true, true,
@@ -320,6 +320,7 @@ public final class Software3DContext {
                     pending.vertexArray(),
                     pending.colorArray(),
                     pending.textureCoordArray(),
+                    null,
                     null,
                     pending.texture(),
                     pending.transform(),
@@ -499,7 +500,8 @@ public final class Software3DContext {
 
     private void renderPrimitiveBuffer(Graphics2D g, BufferedImage target, int originX, int originY, int surfaceWidth, int surfaceHeight,
                                        int primitiveType, int primitiveParam, int primitiveStart, int primitiveCount, int[] vertexArray,
-                                       int[] colorArray, int[] textureCoordArray, int[] pointSpriteArray, SoftwareTexture texture,
+                                       int[] colorArray, int[] textureCoordArray, float[] preciseTextureCoordArray,
+                                       int[] pointSpriteArray, SoftwareTexture texture,
                                        float[] transform, Projection projection, Rectangle clip,
                                        float centerX, float centerY, float orthoWidth, float orthoHeight,
                                        boolean allowBlend, boolean transparentPaletteZero, int blendMode, float transparency,
@@ -542,18 +544,25 @@ public final class Software3DContext {
             }
             float[] uv = null;
             float[] vertexModulationColors = null;
-            if (texture != null && verticesPerPrimitive >= 3 && textureCoordArray != null
-                    && textureCoordArray.length >= primitive * verticesPerPrimitive * 2 + verticesPerPrimitive * 2) {
+            if (texture != null && verticesPerPrimitive >= 3
+                    && ((preciseTextureCoordArray != null
+                    && preciseTextureCoordArray.length >= primitive * verticesPerPrimitive * 2 + verticesPerPrimitive * 2)
+                    || (textureCoordArray != null
+                    && textureCoordArray.length >= primitive * verticesPerPrimitive * 2 + verticesPerPrimitive * 2))) {
                 uv = new float[verticesPerPrimitive * 2];
                 int uvBase = primitive * verticesPerPrimitive * 2;
                 for (int i = 0; i < uv.length; i++) {
-                    int coordinate = textureCoordArray[uvBase + i];
-                    // opt.ui.j3d primitive texture coordinates are consumed as unsigned bytes by the
-                    // original renderer, so animated scrolling can legitimately pass through negative
-                    // or >255 values before they wrap back into the 8-bit texture domain.
-                    uv[i] = unsignedByteTextureCoords
-                            ? (coordinate & 0xFF)
-                            : coordinate;
+                    if (preciseTextureCoordArray != null) {
+                        uv[i] = preciseTextureCoordArray[uvBase + i];
+                    } else {
+                        int coordinate = textureCoordArray[uvBase + i];
+                        // opt.ui.j3d primitive texture coordinates are consumed as unsigned bytes by the
+                        // original renderer, so animated scrolling can legitimately pass through negative
+                        // or >255 values before they wrap back into the 8-bit texture domain.
+                        uv[i] = unsignedByteTextureCoords
+                                ? (coordinate & 0xFF)
+                                : coordinate;
+                    }
                     uv[i] += (i & 1) == 0 ? textureTranslateU : textureTranslateV;
                 }
             }
