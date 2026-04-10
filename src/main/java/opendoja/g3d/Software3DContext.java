@@ -1557,6 +1557,12 @@ public final class Software3DContext {
         }
         int dest = target.getRGB(x, y);
         switch (blendOp) {
+            case REPLACE -> {
+                target.setRGB(x, y, 0xFF000000 | (source & 0x00FFFFFF));
+                return;
+            }
+            case ALPHA -> {
+            }
             case HALF -> {
                 // Mascot material blend bits use framebuffer blend ops, not alpha-over.
                 target.setRGB(x, y, averagePixel(dest, applySourceAlphaToBlendColor(source)));
@@ -1569,8 +1575,6 @@ public final class Software3DContext {
             case SUB -> {
                 target.setRGB(x, y, subtractPixel(dest, applySourceAlphaToBlendColor(source)));
                 return;
-            }
-            case NORMAL -> {
             }
         }
         if (srcA >= 255) {
@@ -1612,7 +1616,7 @@ public final class Software3DContext {
         int primaryBlend = blendMode & 0x60;
         if (primaryBlend != 0) {
             if (blendSemantics == BlendSemantics.UI_GRAPHICS3D && primaryBlend == 0x20) {
-                return BlendOp.NORMAL;
+                return BlendOp.ALPHA;
             }
             if (primaryBlend == 0x20) {
                 return BlendOp.HALF;
@@ -1634,7 +1638,7 @@ public final class Software3DContext {
         if (materialBlend == 0x06) {
             return BlendOp.SUB;
         }
-        return BlendOp.NORMAL;
+        return BlendOp.REPLACE;
     }
 
     private static int averagePixel(int dest, int source) {
@@ -1843,7 +1847,8 @@ public final class Software3DContext {
     }
 
     private enum BlendOp {
-        NORMAL,
+        REPLACE,
+        ALPHA,
         HALF,
         ADD,
         SUB

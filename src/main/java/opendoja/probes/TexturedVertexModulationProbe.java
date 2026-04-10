@@ -81,12 +81,12 @@ public final class TexturedVertexModulationProbe {
         if (uniqueOpaque.size() < 20) {
             throw new IllegalStateException("Expected interpolated textured vertex modulation, got " + uniqueOpaque.size() + " colors");
         }
-        if (translucentPixels == 0) {
-            throw new IllegalStateException("Expected translucent output from vertex alpha modulation");
+        if (translucentPixels != 0) {
+            throw new IllegalStateException("Normal replace compositing must not alpha-blend vertex color alpha");
         }
 
         int center = target.getRGB(16, 16);
-        assertChannel("center alpha", (center >>> 24) & 0xFF, 163, 3);
+        assertChannel("center alpha", (center >>> 24) & 0xFF, 255, 0);
         assertChannel("center red", (center >>> 16) & 0xFF, 61, 3);
         assertChannel("center green", (center >>> 8) & 0xFF, 71, 3);
         assertChannel("center blue", center & 0xFF, 123, 3);
