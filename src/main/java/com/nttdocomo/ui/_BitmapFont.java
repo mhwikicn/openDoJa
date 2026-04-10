@@ -38,7 +38,7 @@ import java.util.Map;
 class _BitmapFont extends Font {
     private static final String RESOURCE_ROOT = "/opendoja/fonts/bitmap/";
     private static final int[] SUPPORTED_SIZES = {8, 10, 12, 16, 20, 24, 30};
-    private static final int QUESTION_MARK = 0x003F;
+    private static final int REPLACEMENT_CHARACTER = 0xFFFD;
     private static final int SPACE = 0x0020;
     private static final int IDEOGRAPHIC_SPACE = 0x3000;
     private static final java.awt.Font PLACEHOLDER_FONT = new java.awt.Font(java.awt.Font.DIALOG, java.awt.Font.PLAIN, 12);
@@ -263,7 +263,7 @@ class _BitmapFont extends Font {
         if (strike.codePointToGlyph.containsKey(codePoint)) {
             return codePoint;
         }
-        return QUESTION_MARK;
+        return REPLACEMENT_CHARACTER;
     }
 
     private static boolean isHalfWidth(int codePoint) {
@@ -304,7 +304,7 @@ class _BitmapFont extends Font {
                 for (int i = 0; i < glyphCount; i++) {
                     codePointToGlyph.put(codePoints[i], i);
                 }
-                int questionMarkIndex = codePointToGlyph.getOrDefault(QUESTION_MARK, -1);
+                int questionMarkIndex = codePointToGlyph.getOrDefault(REPLACEMENT_CHARACTER, -1);
                 strikes.put(height, new Strike(
                         height,
                         width,
