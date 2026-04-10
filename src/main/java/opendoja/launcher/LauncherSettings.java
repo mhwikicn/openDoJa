@@ -12,6 +12,7 @@ record LauncherSettings(
         String userId,
         String fontType,
         String httpOverrideDomain,
+        String fileEncodingOverride,
         String microeditionPlatformOverride,
         boolean disableBytecodeVerification,
         boolean disableOsDpiScaling) {
@@ -22,6 +23,7 @@ record LauncherSettings(
         userId = OpenDoJaIdentity.normalizeUserId(userId);
         fontType = LaunchConfig.FontType.normalizeId(fontType);
         httpOverrideDomain = normalizeHttpOverrideDomain(httpOverrideDomain);
+        fileEncodingOverride = normalizeFreeformOverride(fileEncodingOverride);
         microeditionPlatformOverride = OpenDoJaLaunchArgs.normalizeMicroeditionPlatformOverride(microeditionPlatformOverride);
     }
 
@@ -30,6 +32,7 @@ record LauncherSettings(
                 OpenDoJaIdentity.defaultTerminalId(),
                 OpenDoJaIdentity.defaultUserId(),
                 LaunchConfig.FontType.BITMAP.id,
+                "",
                 "",
                 "",
                 false,
@@ -50,5 +53,9 @@ record LauncherSettings(
             return "";
         }
         return candidate.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private static String normalizeFreeformOverride(String candidate) {
+        return candidate == null ? "" : candidate.trim();
     }
 }

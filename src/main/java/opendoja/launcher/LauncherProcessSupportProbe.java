@@ -26,6 +26,7 @@ public final class LauncherProcessSupportProbe {
         String expectedEncoding = args.length == 0 ? DoJaEncoding.defaultCharsetName() : args[0];
         verifyBuildLaunchCommandAddsExpectedFileEncoding(expectedEncoding);
         verifySpawnedJamSeesExpectedFileEncoding(expectedEncoding);
+        verifyLauncherSettingsOverrideEncoding();
         System.out.println("Launcher process support probe OK");
     }
 
@@ -42,13 +43,17 @@ public final class LauncherProcessSupportProbe {
     }
 
     private static void verifySpawnedJamSeesExpectedFileEncoding(String expectedEncoding) throws Exception {
+        verifySpawnedJamSeesExpectedFileEncoding(null, expectedEncoding);
+    }
+
+    private static void verifySpawnedJamSeesExpectedFileEncoding(LauncherSettings settings, String expectedEncoding) throws Exception {
         Path root = Files.createTempDirectory("launcher-process-support");
         Path output = root.resolve("encoding.properties");
         GameLaunchSelection selection = new GameLaunchSelection(
                 writeJam(root.resolve("EncodingProbe.jam"), output),
                 currentArtifactPath());
 
-        Process process = new LauncherProcessSupport().startInBackground(selection);
+        Process process = new LauncherProcessSupport().startInBackground(selection, settings);
         if (!process.waitFor(20, TimeUnit.SECONDS)) {
             process.destroyForcibly();
             throw new IllegalStateException("spawned JAM probe timed out");
@@ -67,6 +72,31 @@ public final class LauncherProcessSupportProbe {
                 "spawned JAM file.encoding should be " + expectedEncoding + " but was " + actualFileEncoding);
         check(canonicalExpected.equals(actualDefaultCharset),
                 "spawned JAM default charset should be " + canonicalExpected + " but was " + actualDefaultCharset);
+    }
+
+    private static void verifyLauncherSettingsOverrideEncoding() throws Exception {
+        String overrideEncoding = StandardCharsets.UTF_16LE.name();
+        LauncherSettings settings = new LauncherSettings(
+                1,
+                opendoja.audio.mld.MLDSynth.DEFAULT.id,
+                opendoja.host.OpenDoJaIdentity.defaultTerminalId(),
+                opendoja.host.OpenDoJaIdentity.defaultUserId(),
+                opendoja.host.LaunchConfig.FontType.BITMAP.id,
+                "",
+                overrideEncoding,
+                "",
+                false,
+                false);
+        GameLaunchSelection selection = new GameLaunchSelection(
+                java.nio.file.Path.of("probe.jam"),
+                java.nio.file.Path.of("probe.jar"));
+        List<String> command = new LauncherProcessSupport().buildLaunchCommand(selection, settings);
+        String expectedArgument = "-Dfile.encoding=" + overrideEncoding;
+        check(command.contains(expectedArgument),
+                "launch command should contain explicit launcher override " + expectedArgument + " but was " + command);
+        check(command.stream().filter(arg -> arg.startsWith("-Dfile.encoding=")).count() == 1,
+                "launch command should contain exactly one file.encoding argument with launcher override: " + command);
+        verifySpawnedJamSeesExpectedFileEncoding(settings, overrideEncoding);
     }
 
     private static Path writeJam(Path jam, Path output) throws Exception {

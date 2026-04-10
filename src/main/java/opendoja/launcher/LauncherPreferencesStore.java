@@ -17,6 +17,7 @@ final class LauncherPreferencesStore {
     private static final String USER_ID_KEY = "userId";
     private static final String FONT_TYPE_KEY = "fontType";
     private static final String HTTP_OVERRIDE_DOMAIN_KEY = "httpOverrideDomain";
+    private static final String FILE_ENCODING_OVERRIDE_KEY = "fileEncodingOverride";
     private static final String MICROEDITION_PLATFORM_OVERRIDE_KEY = "microeditionPlatformOverride";
     private static final String DISABLE_BYTECODE_VERIFICATION_KEY = "disableBytecodeVerification";
     private static final String DISABLE_OS_DPI_SCALING_KEY = "disableOsDpiScaling";
@@ -35,6 +36,7 @@ final class LauncherPreferencesStore {
         String storedFontType = preferences.get(FONT_TYPE_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.FONT_TYPE));
         String storedHttpOverrideDomain = preferences.get(HTTP_OVERRIDE_DOMAIN_KEY,
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HTTP_OVERRIDE_DOMAIN, ""));
+        String storedFileEncodingOverride = preferences.get(FILE_ENCODING_OVERRIDE_KEY, "");
         String storedMicroeditionPlatformOverride = preferences.get(MICROEDITION_PLATFORM_OVERRIDE_KEY,
                 OpenDoJaLaunchArgs.microeditionPlatformOverride());
         boolean storedDisableBytecodeVerification = preferences.getBoolean(DISABLE_BYTECODE_VERIFICATION_KEY, false);
@@ -46,6 +48,7 @@ final class LauncherPreferencesStore {
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.USER_ID, storedUserId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.FONT_TYPE, storedFontType),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HTTP_OVERRIDE_DOMAIN, storedHttpOverrideDomain),
+                storedFileEncodingOverride,
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MICROEDITION_PLATFORM_OVERRIDE, storedMicroeditionPlatformOverride),
                 storedDisableBytecodeVerification,
                 storedDisableOsDpiScaling);
@@ -58,6 +61,7 @@ final class LauncherPreferencesStore {
         preferences.put(USER_ID_KEY, settings.userId());
         preferences.put(FONT_TYPE_KEY, settings.fontType());
         preferences.put(HTTP_OVERRIDE_DOMAIN_KEY, settings.httpOverrideDomain());
+        preferences.put(FILE_ENCODING_OVERRIDE_KEY, settings.fileEncodingOverride());
         preferences.put(MICROEDITION_PLATFORM_OVERRIDE_KEY, settings.microeditionPlatformOverride());
         preferences.putBoolean(DISABLE_BYTECODE_VERIFICATION_KEY, settings.disableBytecodeVerification());
         preferences.putBoolean(DISABLE_OS_DPI_SCALING_KEY, settings.disableOsDpiScaling());

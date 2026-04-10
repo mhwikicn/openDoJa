@@ -77,12 +77,21 @@ final class LauncherSettingsController {
     }
 
     String promptMicroeditionPlatformOverride(Component parent, String currentValue) {
-        String entered = promptValue(parent, "Phone Model", currentValue,
+        String entered = promptValue(parent, "Phone Model Override", currentValue,
                 "Enter the value to return for microedition.platform. Leave blank to use the JAM/default platform.");
         if (entered == null) {
             return null;
         }
         return OpenDoJaLaunchArgs.normalizeMicroeditionPlatformOverride(entered);
+    }
+
+    String promptFileEncodingOverride(Component parent, String currentValue) {
+        String entered = promptValue(parent, "Encoding Override", currentValue,
+                "Enter the value to pass as -Dfile.encoding. Leave blank to use the automatic/default encoding.");
+        if (entered == null) {
+            return null;
+        }
+        return entered.trim();
     }
 
     private String promptValue(Component parent, String title, String currentValue, String prompt) {

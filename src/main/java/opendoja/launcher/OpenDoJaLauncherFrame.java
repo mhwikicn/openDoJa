@@ -110,25 +110,32 @@ final class OpenDoJaLauncherFrame extends JFrame {
         settingsMenu.add(buildFontTypeMenu());
         settingsMenu.add(buildExperimentalMenu());
         settingsMenu.addSeparator();
-        settingsMenu.add(new JMenuItem(new AbstractAction("Terminal ID...") {
+        settingsMenu.add(new JMenuItem(new AbstractAction("Set Terminal ID...") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 updateTerminalId();
             }
         }));
-        settingsMenu.add(new JMenuItem(new AbstractAction("User ID...") {
+        settingsMenu.add(new JMenuItem(new AbstractAction("Set User ID...") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 updateUserId();
             }
         }));
+        settingsMenu.addSeparator();
         settingsMenu.add(new JMenuItem(new AbstractAction("HTTP Host Override...") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 updateHttpOverrideDomain();
             }
         }));
-        settingsMenu.add(new JMenuItem(new AbstractAction("Phone Model...") {
+        settingsMenu.add(new JMenuItem(new AbstractAction("Encoding Override...") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                updateFileEncodingOverride();
+            }
+        }));
+        settingsMenu.add(new JMenuItem(new AbstractAction("Phone Model Override...") {
             @Override
             public void actionPerformed(ActionEvent event) {
                 updateMicroeditionPlatformOverride();
@@ -369,6 +376,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                             current.userId(),
                             current.fontType(),
                             current.httpOverrideDomain(),
+                            current.fileEncodingOverride(),
                             current.microeditionPlatformOverride(),
                             current.disableBytecodeVerification(),
                             current.disableOsDpiScaling()));
@@ -397,6 +405,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                             current.userId(),
                             fontType.id,
                             current.httpOverrideDomain(),
+                            current.fileEncodingOverride(),
                             current.microeditionPlatformOverride(),
                             current.disableBytecodeVerification(),
                             current.disableOsDpiScaling()));
@@ -425,6 +434,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                             current.userId(),
                             current.fontType(),
                             current.httpOverrideDomain(),
+                            current.fileEncodingOverride(),
                             current.microeditionPlatformOverride(),
                             current.disableBytecodeVerification(),
                             current.disableOsDpiScaling()));
@@ -452,6 +462,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                     current.userId(),
                     current.fontType(),
                     current.httpOverrideDomain(),
+                    current.fileEncodingOverride(),
                     current.microeditionPlatformOverride(),
                     disableBytecodeVerificationItem.isSelected(),
                     current.disableOsDpiScaling()));
@@ -469,6 +480,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                     current.userId(),
                     current.fontType(),
                     current.httpOverrideDomain(),
+                    current.fileEncodingOverride(),
                     current.microeditionPlatformOverride(),
                     current.disableBytecodeVerification(),
                     disableOsDpiScalingItem.isSelected()));
@@ -491,6 +503,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                 current.userId(),
                 current.fontType(),
                 current.httpOverrideDomain(),
+                current.fileEncodingOverride(),
                 current.microeditionPlatformOverride(),
                 current.disableBytecodeVerification(),
                 current.disableOsDpiScaling()));
@@ -509,6 +522,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                 updated,
                 current.fontType(),
                 current.httpOverrideDomain(),
+                current.fileEncodingOverride(),
                 current.microeditionPlatformOverride(),
                 current.disableBytecodeVerification(),
                 current.disableOsDpiScaling()));
@@ -526,6 +540,26 @@ final class OpenDoJaLauncherFrame extends JFrame {
                 current.terminalId(),
                 current.userId(),
                 current.fontType(),
+                updated,
+                current.fileEncodingOverride(),
+                current.microeditionPlatformOverride(),
+                current.disableBytecodeVerification(),
+                current.disableOsDpiScaling()));
+    }
+
+    private void updateFileEncodingOverride() {
+        LauncherSettings current = jamLaunchService.loadSettings();
+        String updated = settingsController.promptFileEncodingOverride(this, current.fileEncodingOverride());
+        if (updated == null) {
+            return;
+        }
+        jamLaunchService.saveSettings(new LauncherSettings(
+                current.hostScale(),
+                current.synthId(),
+                current.terminalId(),
+                current.userId(),
+                current.fontType(),
+                current.httpOverrideDomain(),
                 updated,
                 current.microeditionPlatformOverride(),
                 current.disableBytecodeVerification(),
@@ -545,6 +579,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                 current.userId(),
                 current.fontType(),
                 current.httpOverrideDomain(),
+                current.fileEncodingOverride(),
                 updated,
                 current.disableBytecodeVerification(),
                 current.disableOsDpiScaling()));

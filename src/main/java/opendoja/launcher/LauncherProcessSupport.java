@@ -47,7 +47,7 @@ final class LauncherProcessSupport {
         }
         Set<String> overriddenProperties = appendForwardedProperties(command, System.getProperties(), settings);
         appendLauncherSettings(command, settings, overriddenProperties);
-        appendFileEncoding(command);
+        appendFileEncoding(command, settings);
         command.add("-cp");
         command.add(resolveLauncherArtifact() + File.pathSeparator + selection.gameJarPath());
         command.add(OpenDoJaLauncher.class.getName());
@@ -107,8 +107,11 @@ final class LauncherProcessSupport {
         command.add("-D" + name + "=" + value);
     }
 
-    private void appendFileEncoding(List<String> command) {
-        String fileEncoding = DoJaEncoding.explicitFileEncodingLaunchArgument();
+    private void appendFileEncoding(List<String> command, LauncherSettings settings) {
+        String fileEncoding = settings == null ? null : settings.fileEncodingOverride();
+        if (fileEncoding == null || fileEncoding.isBlank()) {
+            fileEncoding = DoJaEncoding.explicitFileEncodingLaunchArgument();
+        }
         if (fileEncoding == null) {
             fileEncoding = DoJaEncoding.defaultCharsetName();
         }
