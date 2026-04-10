@@ -112,6 +112,10 @@ public abstract class Object3D {
                     );
                     System.arraycopy(loadedPrimitive.vertices(), 0, primitive.getVertexArray(), 0,
                             loadedPrimitive.vertices().length);
+                    if (loadedPrimitive.colors() != null) {
+                        System.arraycopy(loadedPrimitive.colors(), 0, primitive.getColorArray(), 0,
+                                loadedPrimitive.colors().length);
+                    }
                     if (loadedPrimitive.textureCoords() != null) {
                         System.arraycopy(loadedPrimitive.textureCoords(), 0, primitive.getTextureCoordArray(), 0,
                                 loadedPrimitive.textureCoords().length);

@@ -27,14 +27,22 @@ public final class RockmanDashD4GroupProbe {
     private static final float TRANSFORM_EPSILON = 0.00001f;
     private static final float BOUNDS_EPSILON = 0.01f;
     private static final ExpectedPrimitive[] EXPECTED_PRIMITIVES = {
-            new ExpectedPrimitive(128, 128, 1, 135, -237, -130, new int[]{1, -219, 68, -219, 68, -158}),
-            new ExpectedPrimitive(64, 64, 0, 68, -181, 24, new int[]{0, -181, 0, 24, 68, 24}),
-            new ExpectedPrimitive(256, 256, -546, 819, -952, -201, new int[]{0, -201, 0, -338, 273, -338}),
-            new ExpectedPrimitive(128, 128, 0, 137, -237, -101, new int[]{102, -101, 89, -101, 89, -225}),
-            new ExpectedPrimitive(32, 32, -239, 239, -213, 163, new int[]{137, 60, 137, -8, 34, -110}),
-            new ExpectedPrimitive(32, 32, -256, 256, -230, 180, new int[]{-51, -196, -34, 111, -34, -162}),
-            new ExpectedPrimitive(64, 64, 0, 28, -71, -51, new int[]{27, -51, 0, -51, 14, -71}),
-            new ExpectedPrimitive(32, 32, -110, 110, -196, 230, new int[]{-51, -128, 0, -72, 51, -128})
+            new ExpectedPrimitive(128, 128, 1, 135, -237, -130, new int[]{1, -219, 68, -219, 68, -158},
+                    new int[]{0xffffffff, 0xffffffff, 0xffbfbfbf}, 102, 0),
+            new ExpectedPrimitive(64, 64, 0, 68, -181, 24, new int[]{0, -181, 0, 24, 68, 24},
+                    new int[]{0xffc0c0c0, 0xffc0c0c0, 0xffc0c0c0}, 12, 0),
+            new ExpectedPrimitive(256, 256, -546, 819, -952, -201, new int[]{0, -201, 0, -338, 273, -338},
+                    new int[]{0xffbf7f3f, 0xffbf7f3f, 0xffbf7f3f}, 2317, 0),
+            new ExpectedPrimitive(128, 128, 0, 137, -237, -101, new int[]{102, -101, 89, -101, 89, -225},
+                    new int[]{0xffffbf7f, 0xffffbf7f, 0xff8c8c8c}, 798, 0),
+            new ExpectedPrimitive(32, 32, -239, 239, -213, 163, new int[]{137, 60, 137, -8, 34, -110},
+                    new int[]{0x6c999999, 0x6cffffff, 0x6cffffff}, 477, 477),
+            new ExpectedPrimitive(32, 32, -256, 256, -230, 180, new int[]{-51, -196, -34, 111, -34, -162},
+                    new int[]{0x0cffbf7f, 0x6cff7e18, 0x6cff7e18}, 2063, 1743),
+            new ExpectedPrimitive(64, 64, 0, 28, -71, -51, new int[]{27, -51, 0, -51, 14, -71},
+                    new int[]{0xffbf5959, 0xffbf5959, 0xffffffff}, 108, 0),
+            new ExpectedPrimitive(32, 32, -110, 110, -196, 230, new int[]{-51, -128, 0, -72, 51, -128},
+                    new int[]{0xff000000, 0xffffffff, 0xffffffff}, 251, 0)
     };
 
     private RockmanDashD4GroupProbe() {
@@ -145,6 +153,32 @@ public final class RockmanDashD4GroupProbe {
             throw new IllegalStateException("Primitive " + primitiveIndex + " first triangle UV mismatch: "
                     + Arrays.toString(firstTriangle));
         }
+        if ((primitive.getPrimitiveParam() & 0x0C00) != Primitive.COLOR_PER_VERTEX_INTERNAL) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " lost its D4 per-vertex color mode");
+        }
+        int[] colors = primitive.getColorArray();
+        if (colors == null || colors.length == 0) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " has no decoded D4 vertex colors");
+        }
+        int[] firstTriangleColors = Arrays.copyOf(colors, expected.firstTriangleColors.length);
+        if (!Arrays.equals(firstTriangleColors, expected.firstTriangleColors)) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " first triangle color mismatch: "
+                    + Arrays.toString(firstTriangleColors));
+        }
+        int nonWhite = 0;
+        int translucent = 0;
+        for (int color : colors) {
+            if (color != 0xFFFFFFFF) {
+                nonWhite++;
+            }
+            if (((color >>> 24) & 0xFF) != 0xFF) {
+                translucent++;
+            }
+        }
+        if (nonWhite != expected.nonWhiteVertexColors || translucent != expected.translucentVertexColors) {
+            throw new IllegalStateException("Primitive " + primitiveIndex + " vertex color stats mismatch: nonWhite="
+                    + nonWhite + " translucent=" + translucent);
+        }
     }
 
     private static void verifyTransformedBounds(Group group) {
@@ -206,6 +240,7 @@ public final class RockmanDashD4GroupProbe {
     }
 
     private record ExpectedPrimitive(int textureWidth, int textureHeight, int minU, int maxU, int minV, int maxV,
-                                     int[] firstTriangleUvs) {
+                                     int[] firstTriangleUvs, int[] firstTriangleColors,
+                                     int nonWhiteVertexColors, int translucentVertexColors) {
     }
 }

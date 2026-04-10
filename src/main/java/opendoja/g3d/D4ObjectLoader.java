@@ -158,18 +158,21 @@ public final class D4ObjectLoader {
         }
         D4Array positions = null;
         D4Array uvs = null;
+        D4Array colors = null;
         for (D4Array array : arrays) {
             if (array.components == 3 && positions == null) {
                 positions = array;
             } else if (array.components == 2 && uvs == null) {
                 uvs = array;
+            } else if (array.components == 4 && colors == null) {
+                colors = array;
             }
         }
         float originX = object.payload.length >= 20 ? littleFloat(object.payload, 16) : 0f;
         float originY = object.payload.length >= 24 ? littleFloat(object.payload, 20) : 0f;
         float originZ = object.payload.length >= 28 ? littleFloat(object.payload, 24) : 0f;
         float vertexScale = object.payload.length >= 32 ? littleFloat(object.payload, 28) : 1f;
-        return new D4MeshArrays(positions, uvs, originX, originY, originZ, vertexScale);
+        return new D4MeshArrays(positions, uvs, colors, originX, originY, originZ, vertexScale);
     }
 
     private static D4Array decodeArray(D4Object object) throws IOException {
@@ -284,11 +287,17 @@ public final class D4ObjectLoader {
         int primitiveParam = descriptor.textureId >= 0 && arrays.uvs != null
                 ? Primitive.TEXTURE_COORD_PER_VERTEX
                 : Primitive.COLOR_NONE;
+        if (arrays.colors != null) {
+            primitiveParam |= Primitive.COLOR_PER_VERTEX_INTERNAL;
+        }
         D4TextureData textureData = textures.get(descriptor.textureId);
         if (textureData != null && textureData.transparentPaletteZero) {
             primitiveParam |= Primitive.TEXTURE_COLORKEY;
         }
         int[] vertices = new int[triangleCount * 9];
+        int[] colors = (primitiveParam & 0x0C00) == Primitive.COLOR_PER_VERTEX_INTERNAL
+                ? new int[triangleCount * 3]
+                : null;
         int[] uvs = (primitiveParam & 0x3000) == Primitive.TEXTURE_COORD_PER_VERTEX
                 ? new int[triangleCount * 6]
                 : null;
@@ -303,6 +312,11 @@ public final class D4ObjectLoader {
                 writeVertex(vertices, triangle * 9, arrays.positions, first);
                 writeVertex(vertices, triangle * 9 + 3, arrays.positions, indexSet.indices[cursor + i]);
                 writeVertex(vertices, triangle * 9 + 6, arrays.positions, indexSet.indices[cursor + i + 1]);
+                if (colors != null) {
+                    writeColor(colors, triangle * 3, arrays.colors, first);
+                    writeColor(colors, triangle * 3 + 1, arrays.colors, indexSet.indices[cursor + i]);
+                    writeColor(colors, triangle * 3 + 2, arrays.colors, indexSet.indices[cursor + i + 1]);
+                }
                 if (uvs != null) {
                     writeUv(uvs, triangle * 6, arrays.uvs, first, textureData);
                     writeUv(uvs, triangle * 6 + 2, arrays.uvs, indexSet.indices[cursor + i], textureData);
@@ -312,7 +326,7 @@ public final class D4ObjectLoader {
             }
             cursor += length;
         }
-        return new DecodedPrimitive(primitiveParam, vertices, uvs,
+        return new DecodedPrimitive(primitiveParam, vertices, colors, uvs,
                 textureData == null ? null : textureData.texture, descriptor.textureWrapEnabled);
     }
 
@@ -338,6 +352,18 @@ public final class D4ObjectLoader {
         }
         target[offset] = scaleTextureCoord(uvs.values[source], textureData.texture.width());
         target[offset + 1] = scaleTextureCoord(uvs.values[source + 1], textureData.texture.height());
+    }
+
+    private static void writeColor(int[] target, int offset, D4Array colors, int index) {
+        int source = index * colors.components;
+        if (source + 3 >= colors.values.length) {
+            return;
+        }
+        int red = colors.values[source] & 0xFF;
+        int green = colors.values[source + 1] & 0xFF;
+        int blue = colors.values[source + 2] & 0xFF;
+        int alpha = colors.values[source + 3] & 0xFF;
+        target[offset] = (alpha << 24) | (red << 16) | (green << 8) | blue;
     }
 
     private static boolean decodeTextureWrapEnabled(D4Object object) {
@@ -504,7 +530,7 @@ public final class D4ObjectLoader {
     private record D4Array(int components, int[] values) {
     }
 
-    private record D4MeshArrays(D4Array positions, D4Array uvs,
+    private record D4MeshArrays(D4Array positions, D4Array uvs, D4Array colors,
                                 float originX, float originY, float originZ,
                                 float vertexScale) {
     }
@@ -521,7 +547,7 @@ public final class D4ObjectLoader {
     public record DecodedGroup(Transform transform, List<DecodedPrimitive> elements) {
     }
 
-    public record DecodedPrimitive(int primitiveParam, int[] vertices, int[] textureCoords,
+    public record DecodedPrimitive(int primitiveParam, int[] vertices, int[] colors, int[] textureCoords,
                                    SoftwareTexture textureHandle, boolean textureWrapEnabled) {
     }
 }

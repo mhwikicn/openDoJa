@@ -53,6 +53,11 @@ public class Primitive extends DrawableObject3D {
      */
     public static final int COLOR_PER_FACE = 2048;
     /**
+     * Host-internal flag used by proprietary loaders to carry per-vertex color
+     * modulation. This is not part of the public DoJa API.
+     */
+    public static final int COLOR_PER_VERTEX_INTERNAL = 3072;
+    /**
      * Flag indicating that no texture coordinates are stored.
      */
     public static final int TEXTURE_COORD_NONE = 0;
@@ -131,6 +136,7 @@ public class Primitive extends DrawableObject3D {
         int colorMode = primitiveParam & 0x0C00;
         this.colorArray = switch (colorMode) {
             case COLOR_PER_PRIMITIVE, COLOR_PER_FACE -> new int[primitiveCount];
+            case COLOR_PER_VERTEX_INTERNAL -> new int[vertexCount];
             default -> null;
         };
         this.textureCoordArray = (primitiveParam & 0x3000) == TEXTURE_COORD_PER_VERTEX ? new int[vertexCount * 2] : null;

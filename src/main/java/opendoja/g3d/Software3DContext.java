@@ -406,7 +406,8 @@ public final class Software3DContext {
             }
             float[] textureCoords = polygon.textureCoords();
             if (projection != null) {
-                ClippedPolygon clipped = clipPerspectivePolygon(transformed, textureCoords, projection, centerX, centerY, surfaceWidth, surfaceHeight);
+                ClippedPolygon clipped = clipPerspectivePolygon(transformed, textureCoords, null, projection,
+                        centerX, centerY, surfaceWidth, surfaceHeight);
                 if (clipped == null) {
                     continue;
                 }
@@ -456,6 +457,7 @@ public final class Software3DContext {
                             effectiveBlendOp, true, fog, sphereTexture, toonShader);
                 } else {
                     addProjectedFaces(projected, xs, ys, depthValues, modulationColor, avgDepth, polygonTexture, textureCoords,
+                            null,
                             projection != null, polygon.doubleSided() || !CULL_FIGURES, polygon.transparent(),
                             effectiveBlendOp, true, fog, sphereTexture, toonShader);
                 }
@@ -468,6 +470,7 @@ public final class Software3DContext {
                         effectiveBlendOp, true, fog, sphereTexture, toonShader);
             } else {
                 addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null,
+                        null,
                         projection != null, polygon.doubleSided() || !CULL_FIGURES, false, effectiveBlendOp, true, fog, sphereTexture, toonShader);
             }
         }
@@ -510,6 +513,7 @@ public final class Software3DContext {
         ToonShaderParams toonShader = resolveToonShader(texture, defaultToonShader);
         List<ProjectedPolygon> projected = new ArrayList<>();
         for (int primitive = start; primitive < end; primitive++) {
+            boolean internalVertexColors = (primitiveParam & 0x0C00) == com.nttdocomo.ui.graphics3d.Primitive.COLOR_PER_VERTEX_INTERNAL;
             int vertexBase = primitive * verticesPerPrimitive * 3;
             if (vertexBase + verticesPerPrimitive * 3 > vertexArray.length) {
                 break;
@@ -524,6 +528,7 @@ public final class Software3DContext {
                 transformed[destination + 2] = point[2];
             }
             float[] uv = null;
+            float[] vertexModulationColors = null;
             if (texture != null && verticesPerPrimitive >= 3 && textureCoordArray != null
                     && textureCoordArray.length >= primitive * verticesPerPrimitive * 2 + verticesPerPrimitive * 2) {
                 uv = new float[verticesPerPrimitive * 2];
@@ -536,6 +541,21 @@ public final class Software3DContext {
                     uv[i] = unsignedByteTextureCoords
                             ? (coordinate & 0xFF)
                             : coordinate;
+                }
+            }
+            if (texture != null && verticesPerPrimitive >= 3
+                    && internalVertexColors
+                    && colorArray != null
+                    && colorArray.length >= primitive * verticesPerPrimitive + verticesPerPrimitive) {
+                vertexModulationColors = new float[verticesPerPrimitive * 4];
+                int colorBase = primitive * verticesPerPrimitive;
+                for (int i = 0; i < verticesPerPrimitive; i++) {
+                    int color = scaleColor(colorArray[colorBase + i], transparency, 1f);
+                    int destination = i * 4;
+                    vertexModulationColors[destination] = (color >>> 24) & 0xFF;
+                    vertexModulationColors[destination + 1] = (color >>> 16) & 0xFF;
+                    vertexModulationColors[destination + 2] = (color >>> 8) & 0xFF;
+                    vertexModulationColors[destination + 3] = color & 0xFF;
                 }
             }
             if (primitiveType == com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES) {
@@ -563,7 +583,7 @@ public final class Software3DContext {
                     depthValues[0] = -pointZ;
                     avgDepth = pointZ;
                 }
-                int baseColor = colorForPrimitive(primitive, primitiveParam, colorArray);
+                int baseColor = internalVertexColors ? 0xFFFFFFFF : colorForPrimitive(primitive, primitiveParam, colorArray);
                 if (opaqueRgbColors) {
                     baseColor = normalizeOpaqueRgbColor(baseColor);
                 }
@@ -575,12 +595,14 @@ public final class Software3DContext {
                 continue;
             }
             if (projection != null) {
-                ClippedPolygon clipped = clipPerspectivePolygon(transformed, uv, projection, centerX, centerY, surfaceWidth, surfaceHeight);
+                ClippedPolygon clipped = clipPerspectivePolygon(transformed, uv, vertexModulationColors, projection,
+                        centerX, centerY, surfaceWidth, surfaceHeight);
                 if (clipped == null) {
                     continue;
                 }
                 transformed = clipped.points();
                 uv = clipped.textureCoords();
+                vertexModulationColors = clipped.vertexModulationColors();
             }
             int vertexCount = transformed.length / 3;
             float[] xs = new float[vertexCount];
@@ -606,26 +628,33 @@ public final class Software3DContext {
                 }
             }
             avgDepth /= vertexCount;
-            int baseColor = colorForPrimitive(primitive, primitiveParam, colorArray);
+            int baseColor = internalVertexColors ? 0xFFFFFFFF : colorForPrimitive(primitive, primitiveParam, colorArray);
             if (opaqueRgbColors) {
                 baseColor = normalizeOpaqueRgbColor(baseColor);
             }
             int color = scaleColor(baseColor, transparency, 1f);
             if (texture != null && vertexCount >= 3 && uv != null) {
                 if (primitiveType == 4 && vertexCount == 4) {
-                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, transparentPaletteZero, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, texture, uv,
+                            vertexModulationColors, projection != null, transparentPaletteZero, effectiveBlendOp, depthWrite,
+                            fog, sphereTexture, toonShader);
                 } else {
-                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, uv, projection != null, true, transparentPaletteZero, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, uv,
+                            vertexModulationColors, projection != null, true, transparentPaletteZero, effectiveBlendOp, depthWrite,
+                            fog, sphereTexture, toonShader);
                 }
                 continue;
             }
             if (primitiveType == 2) {
-                projected.add(new ProjectedPolygon(xs, ys, depthValues, color, avgDepth, false, null, null, false, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader));
+                projected.add(new ProjectedPolygon(xs, ys, depthValues, color, avgDepth, false, null, null,
+                        null, false, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader));
             } else {
                 if (primitiveType == 4 && vertexCount == 4) {
-                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                    addProjectedPrimitiveQuad(projected, xs, ys, depthValues, color, avgDepth, null, null,
+                            null, projection != null, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
                 } else {
-                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null, projection != null, true, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
+                    addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null,
+                            null, projection != null, true, false, effectiveBlendOp, depthWrite, fog, sphereTexture, toonShader);
                 }
             }
         }
@@ -710,7 +739,7 @@ public final class Software3DContext {
         // DoJa opt point sprites are center-anchored billboards encoded as:
         // width, height, angle, u0, v0, u1, v1, flags.
         addProjectedPrimitiveQuad(projected, spriteXs, spriteYs, spriteDepths, color, depth, texture, spriteUvs,
-                projection != null, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader);
+                null, projection != null, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader);
     }
 
     private static void rotateScreenPoint(float centerX, float centerY, float localX, float localY,
@@ -746,6 +775,7 @@ public final class Software3DContext {
 
     private static void addProjectedPrimitiveQuad(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues,
                                                   int color, float depth, SoftwareTexture texture, float[] textureCoords,
+                                                  float[] vertexModulationColors,
                                                   boolean perspective, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
                                                   FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
         addProjectedTriangle(projected,
@@ -761,6 +791,13 @@ public final class Software3DContext {
                                 textureCoords[0], textureCoords[1],
                                 textureCoords[2], textureCoords[3],
                                 textureCoords[4], textureCoords[5]
+                        },
+                vertexModulationColors == null || vertexModulationColors.length < 16
+                        ? null
+                        : new float[]{
+                                vertexModulationColors[0], vertexModulationColors[1], vertexModulationColors[2], vertexModulationColors[3],
+                                vertexModulationColors[4], vertexModulationColors[5], vertexModulationColors[6], vertexModulationColors[7],
+                                vertexModulationColors[8], vertexModulationColors[9], vertexModulationColors[10], vertexModulationColors[11]
                         },
                 perspective,
                 true,
@@ -783,6 +820,13 @@ public final class Software3DContext {
                                 textureCoords[0], textureCoords[1],
                                 textureCoords[4], textureCoords[5],
                                 textureCoords[6], textureCoords[7]
+                        },
+                vertexModulationColors == null || vertexModulationColors.length < 16
+                        ? null
+                        : new float[]{
+                                vertexModulationColors[0], vertexModulationColors[1], vertexModulationColors[2], vertexModulationColors[3],
+                                vertexModulationColors[8], vertexModulationColors[9], vertexModulationColors[10], vertexModulationColors[11],
+                                vertexModulationColors[12], vertexModulationColors[13], vertexModulationColors[14], vertexModulationColors[15]
                         },
                 perspective,
                 true,
@@ -816,6 +860,7 @@ public final class Software3DContext {
                                 textureCoords[2], textureCoords[3],
                                 textureCoords[4], textureCoords[5]
                         },
+                null,
                 perspective,
                 doubleSided,
                 transparentPaletteZero,
@@ -838,6 +883,7 @@ public final class Software3DContext {
                                 textureCoords[2], textureCoords[3],
                                 textureCoords[6], textureCoords[7]
                         },
+                null,
                 perspective,
                 doubleSided,
                 transparentPaletteZero,
@@ -849,7 +895,7 @@ public final class Software3DContext {
     }
 
     private static void addProjectedFaces(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues, int color, float depth,
-                                          SoftwareTexture texture, float[] textureCoords, boolean perspective,
+                                          SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
                                           boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
                                           FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
         if (xs.length < 3) {
@@ -873,6 +919,13 @@ public final class Software3DContext {
                                     textureCoords[i * 2], textureCoords[i * 2 + 1],
                                     textureCoords[(i + 1) * 2], textureCoords[(i + 1) * 2 + 1]
                             },
+                    vertexModulationColors == null || vertexModulationColors.length < (i + 2) * 4
+                            ? null
+                            : new float[]{
+                                    vertexModulationColors[0], vertexModulationColors[1], vertexModulationColors[2], vertexModulationColors[3],
+                                    vertexModulationColors[i * 4], vertexModulationColors[i * 4 + 1], vertexModulationColors[i * 4 + 2], vertexModulationColors[i * 4 + 3],
+                                    vertexModulationColors[(i + 1) * 4], vertexModulationColors[(i + 1) * 4 + 1], vertexModulationColors[(i + 1) * 4 + 2], vertexModulationColors[(i + 1) * 4 + 3]
+                            },
                     perspective,
                     doubleSided,
                     transparentPaletteZero,
@@ -885,47 +938,51 @@ public final class Software3DContext {
     }
 
     private static void addProjectedTriangle(List<ProjectedPolygon> projected, float[] xs, float[] ys, float[] depthValues, int color, float depth,
-                                             SoftwareTexture texture, float[] textureCoords, boolean perspective,
+                                             SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
                                              boolean doubleSided, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
                                              FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
-        projected.add(new ProjectedPolygon(xs, ys, depthValues, color, depth, true, texture, textureCoords, perspective, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader));
+        projected.add(new ProjectedPolygon(xs, ys, depthValues, color, depth, true, texture, textureCoords,
+                vertexModulationColors, perspective, transparentPaletteZero, blendOp, depthWrite, fog, sphereTexture, toonShader));
     }
 
-    private static ClippedPolygon clipPerspectivePolygon(float[] points, float[] textureCoords, Projection projection,
+    private static ClippedPolygon clipPerspectivePolygon(float[] points, float[] textureCoords, float[] vertexModulationColors, Projection projection,
                                                          float centerX, float centerY, int surfaceWidth, int surfaceHeight) {
-        ClippedPolygon clipped = clipPlane(points, textureCoords, 0f, 0f, 1f, projection.depthOffset() - projection.near());
+        ClippedPolygon clipped = clipPlane(points, textureCoords, vertexModulationColors, 0f, 0f, 1f,
+                projection.depthOffset() - projection.near());
         if (clipped == null) {
             return null;
         }
         if (!CLIP_SCREEN_PLANES) {
             return clipped;
         }
-        clipped = clipPlane(clipped.points(), clipped.textureCoords(),
+        clipped = clipPlane(clipped.points(), clipped.textureCoords(), clipped.vertexModulationColors(),
                 projection.scaleX(), 0f, centerX, centerX * projection.depthOffset());
         if (clipped == null) {
             return null;
         }
-        clipped = clipPlane(clipped.points(), clipped.textureCoords(),
+        clipped = clipPlane(clipped.points(), clipped.textureCoords(), clipped.vertexModulationColors(),
                 -projection.scaleX(), 0f, surfaceWidth - centerX, (surfaceWidth - centerX) * projection.depthOffset());
         if (clipped == null) {
             return null;
         }
-        clipped = clipPlane(clipped.points(), clipped.textureCoords(),
+        clipped = clipPlane(clipped.points(), clipped.textureCoords(), clipped.vertexModulationColors(),
                 0f, projection.scaleY(), centerY, centerY * projection.depthOffset());
         if (clipped == null) {
             return null;
         }
-        return clipPlane(clipped.points(), clipped.textureCoords(),
+        return clipPlane(clipped.points(), clipped.textureCoords(), clipped.vertexModulationColors(),
                 0f, -projection.scaleY(), surfaceHeight - centerY, (surfaceHeight - centerY) * projection.depthOffset());
     }
 
-    private static ClippedPolygon clipPlane(float[] points, float[] textureCoords, float ax, float ay, float az, float aw) {
+    private static ClippedPolygon clipPlane(float[] points, float[] textureCoords, float[] vertexModulationColors,
+                                            float ax, float ay, float az, float aw) {
         int count = points.length / 3;
         if (count < 3) {
             return null;
         }
         float[] clippedPoints = new float[Math.max(18, (count * 2 + 2) * 3)];
         float[] clippedTextureCoords = textureCoords == null ? null : new float[Math.max(12, (count * 2 + 2) * 2)];
+        float[] clippedVertexModulationColors = vertexModulationColors == null ? null : new float[Math.max(24, (count * 2 + 2) * 4)];
         int outCount = 0;
         int previous = count - 1;
         float previousX = points[previous * 3];
@@ -935,6 +992,10 @@ public final class Software3DContext {
         boolean previousInside = previousDistance >= 0f;
         float previousU = textureCoords == null ? 0f : textureCoords[previous * 2];
         float previousV = textureCoords == null ? 0f : textureCoords[previous * 2 + 1];
+        float previousA = vertexModulationColors == null ? 0f : vertexModulationColors[previous * 4];
+        float previousR = vertexModulationColors == null ? 0f : vertexModulationColors[previous * 4 + 1];
+        float previousG = vertexModulationColors == null ? 0f : vertexModulationColors[previous * 4 + 2];
+        float previousB = vertexModulationColors == null ? 0f : vertexModulationColors[previous * 4 + 3];
         for (int i = 0; i < count; i++) {
             float currentX = points[i * 3];
             float currentY = points[i * 3 + 1];
@@ -943,6 +1004,10 @@ public final class Software3DContext {
             boolean currentInside = currentDistance >= 0f;
             float currentU = textureCoords == null ? 0f : textureCoords[i * 2];
             float currentV = textureCoords == null ? 0f : textureCoords[i * 2 + 1];
+            float currentA = vertexModulationColors == null ? 0f : vertexModulationColors[i * 4];
+            float currentR = vertexModulationColors == null ? 0f : vertexModulationColors[i * 4 + 1];
+            float currentG = vertexModulationColors == null ? 0f : vertexModulationColors[i * 4 + 2];
+            float currentB = vertexModulationColors == null ? 0f : vertexModulationColors[i * 4 + 3];
             if (previousInside != currentInside) {
                 float denominator = currentDistance - previousDistance;
                 if (java.lang.Math.abs(denominator) > 0.0001f) {
@@ -955,6 +1020,13 @@ public final class Software3DContext {
                         clippedTextureCoords = ensureClipUvCapacity(clippedTextureCoords, outCount);
                         clippedTextureCoords[outCount * 2] = lerp(previousU, currentU, t);
                         clippedTextureCoords[outCount * 2 + 1] = lerp(previousV, currentV, t);
+                    }
+                    if (clippedVertexModulationColors != null) {
+                        clippedVertexModulationColors = ensureClipColorCapacity(clippedVertexModulationColors, outCount);
+                        clippedVertexModulationColors[outCount * 4] = lerp(previousA, currentA, t);
+                        clippedVertexModulationColors[outCount * 4 + 1] = lerp(previousR, currentR, t);
+                        clippedVertexModulationColors[outCount * 4 + 2] = lerp(previousG, currentG, t);
+                        clippedVertexModulationColors[outCount * 4 + 3] = lerp(previousB, currentB, t);
                     }
                     outCount++;
                 }
@@ -969,6 +1041,13 @@ public final class Software3DContext {
                     clippedTextureCoords[outCount * 2] = currentU;
                     clippedTextureCoords[outCount * 2 + 1] = currentV;
                 }
+                if (clippedVertexModulationColors != null) {
+                    clippedVertexModulationColors = ensureClipColorCapacity(clippedVertexModulationColors, outCount);
+                    clippedVertexModulationColors[outCount * 4] = currentA;
+                    clippedVertexModulationColors[outCount * 4 + 1] = currentR;
+                    clippedVertexModulationColors[outCount * 4 + 2] = currentG;
+                    clippedVertexModulationColors[outCount * 4 + 3] = currentB;
+                }
                 outCount++;
             }
             previousX = currentX;
@@ -978,13 +1057,18 @@ public final class Software3DContext {
             previousInside = currentInside;
             previousU = currentU;
             previousV = currentV;
+            previousA = currentA;
+            previousR = currentR;
+            previousG = currentG;
+            previousB = currentB;
         }
         if (outCount < 3) {
             return null;
         }
         return new ClippedPolygon(
                 Arrays.copyOf(clippedPoints, outCount * 3),
-                clippedTextureCoords == null ? null : Arrays.copyOf(clippedTextureCoords, outCount * 2)
+                clippedTextureCoords == null ? null : Arrays.copyOf(clippedTextureCoords, outCount * 2),
+                clippedVertexModulationColors == null ? null : Arrays.copyOf(clippedVertexModulationColors, outCount * 4)
         );
     }
 
@@ -1046,12 +1130,20 @@ public final class Software3DContext {
 
     private static void drawTexturedPolygon(BufferedImage target, ProjectedPolygon polygon, Rectangle clip, float[] depthBuffer) {
         float[] uvs = polygon.textureCoords();
+        float[] vertexModulationColors = polygon.vertexModulationColors();
         int vertexCount = java.lang.Math.min(polygon.xs().length, uvs.length / 2);
         if (vertexCount < 3) {
             return;
         }
         for (int i = 1; i < vertexCount - 1; i++) {
             drawTexturedTriangle(target, clip, depthBuffer, polygon.texture(), polygon.color(), polygon.perspective(),
+                    vertexModulationColors == null || vertexModulationColors.length < (i + 2) * 4
+                            ? null
+                            : new float[]{
+                                    vertexModulationColors[0], vertexModulationColors[1], vertexModulationColors[2], vertexModulationColors[3],
+                                    vertexModulationColors[i * 4], vertexModulationColors[i * 4 + 1], vertexModulationColors[i * 4 + 2], vertexModulationColors[i * 4 + 3],
+                                    vertexModulationColors[(i + 1) * 4], vertexModulationColors[(i + 1) * 4 + 1], vertexModulationColors[(i + 1) * 4 + 2], vertexModulationColors[(i + 1) * 4 + 3]
+                            },
                     polygon.transparentPaletteZero(), polygon.blendMode(), polygon.depthWrite(), polygon.fog(), polygon.sphereTexture(), polygon.toonShader(),
                     polygon.xs()[0], polygon.ys()[0], uvs[0], uvs[1],
                     polygon.depthValues()[0],
@@ -1077,7 +1169,7 @@ public final class Software3DContext {
     }
 
     private static void drawTexturedTriangle(BufferedImage target, Rectangle clip, float[] depthBuffer, SoftwareTexture texture, int modulationColor,
-                                             boolean perspective, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
+                                             boolean perspective, float[] vertexModulationColors, boolean transparentPaletteZero, BlendOp blendOp, boolean depthWrite,
                                              FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader,
                                              float x0, float y0, float u0, float v0, float d0,
                                              float x1, float y1, float u1, float v1, float d1,
@@ -1151,6 +1243,10 @@ public final class Software3DContext {
                     v = v0 * w0 + v1 * w1 + v2 * w2;
                 }
                 int sample = multiplyColor(texture.sampleColor(u, v, transparentPaletteZero), modulationColor);
+                if (vertexModulationColors != null) {
+                    sample = multiplyColor(sample,
+                            interpolateVertexModulationColor(vertexModulationColors, perspective, w0, w1, w2, d0, d1, d2, depth));
+                }
                 sample = applySphereMap(sample, sphereTexture, target.getWidth(), target.getHeight(), x, y);
                 sample = applyToonShader(sample, toonShader);
                 sample = applyFog(sample, fog, depth, perspective);
@@ -1298,6 +1394,14 @@ public final class Software3DContext {
         return Arrays.copyOf(textureCoords, java.lang.Math.max(required, textureCoords.length * 2));
     }
 
+    private static float[] ensureClipColorCapacity(float[] vertexModulationColors, int vertexIndex) {
+        int required = (vertexIndex + 1) * 4;
+        if (required <= vertexModulationColors.length) {
+            return vertexModulationColors;
+        }
+        return Arrays.copyOf(vertexModulationColors, java.lang.Math.max(required, vertexModulationColors.length * 2));
+    }
+
     private static int multiplyColor(int left, int right) {
         int la = (left >>> 24) & 0xFF;
         int lr = (left >>> 16) & 0xFF;
@@ -1312,6 +1416,39 @@ public final class Software3DContext {
         int g = lg * rg / 255;
         int b = lb * rb / 255;
         return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int interpolateVertexModulationColor(float[] vertexModulationColors, boolean perspective,
+                                                        float w0, float w1, float w2,
+                                                        float d0, float d1, float d2, float depth) {
+        float a;
+        float r;
+        float g;
+        float b;
+        if (perspective) {
+            float weight = java.lang.Math.max(0.000001f, depth);
+            a = (vertexModulationColors[0] * d0 * w0
+                    + vertexModulationColors[4] * d1 * w1
+                    + vertexModulationColors[8] * d2 * w2) / weight;
+            r = (vertexModulationColors[1] * d0 * w0
+                    + vertexModulationColors[5] * d1 * w1
+                    + vertexModulationColors[9] * d2 * w2) / weight;
+            g = (vertexModulationColors[2] * d0 * w0
+                    + vertexModulationColors[6] * d1 * w1
+                    + vertexModulationColors[10] * d2 * w2) / weight;
+            b = (vertexModulationColors[3] * d0 * w0
+                    + vertexModulationColors[7] * d1 * w1
+                    + vertexModulationColors[11] * d2 * w2) / weight;
+        } else {
+            a = vertexModulationColors[0] * w0 + vertexModulationColors[4] * w1 + vertexModulationColors[8] * w2;
+            r = vertexModulationColors[1] * w0 + vertexModulationColors[5] * w1 + vertexModulationColors[9] * w2;
+            g = vertexModulationColors[2] * w0 + vertexModulationColors[6] * w1 + vertexModulationColors[10] * w2;
+            b = vertexModulationColors[3] * w0 + vertexModulationColors[7] * w1 + vertexModulationColors[11] * w2;
+        }
+        return (clamp(java.lang.Math.round(a), 0, 255) << 24)
+                | (clamp(java.lang.Math.round(r), 0, 255) << 16)
+                | (clamp(java.lang.Math.round(g), 0, 255) << 8)
+                | clamp(java.lang.Math.round(b), 0, 255);
     }
 
     private static ToonShaderParams resolveToonShader(SoftwareTexture texture, ToonShaderParams fallback) {
@@ -1641,14 +1778,14 @@ public final class Software3DContext {
         WIDTH_HEIGHT
     }
 
-    private record ClippedPolygon(float[] points, float[] textureCoords) {
+    private record ClippedPolygon(float[] points, float[] textureCoords, float[] vertexModulationColors) {
     }
 
     private record Projection(float near, float far, float scaleX, float scaleY, float depthOffset) {
     }
 
     private record ProjectedPolygon(float[] xs, float[] ys, float[] depthValues, int color, float depth, boolean closed,
-                                    SoftwareTexture texture, float[] textureCoords, boolean perspective,
+                                    SoftwareTexture texture, float[] textureCoords, float[] vertexModulationColors, boolean perspective,
                                     boolean transparentPaletteZero, BlendOp blendMode, boolean depthWrite,
                                     FogState fog, SoftwareTexture sphereTexture, ToonShaderParams toonShader) {
     }
