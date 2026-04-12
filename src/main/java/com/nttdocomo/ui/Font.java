@@ -616,7 +616,7 @@ public class Font {
             return false;
         }
         DoJaProfile profile = DoJaProfile.current();
-        return profile.isKnown() && profile.isBefore(3, 0);
+        return profile.isBefore(3, 0);
     }
 
     private static int resolveDesktopPointSize(int face, java.awt.Font baseFont, int awtStyle, int logicalSize) {
