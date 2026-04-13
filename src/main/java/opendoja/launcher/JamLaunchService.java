@@ -131,7 +131,6 @@ final class JamLaunchService {
 
     static Path ensureSdCardFolder() throws IOException {
         Path sdCardFolder = DoJaStorageHost.deviceRoot().toAbsolutePath().normalize();
-        Files.createDirectories(sdCardFolder);
-        return sdCardFolder;
+        return DoJaStorageHost.ensureDeviceRootExists(sdCardFolder);
     }
 }

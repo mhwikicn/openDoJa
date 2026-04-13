@@ -65,6 +65,11 @@ public final class DoJaStorageHost {
         if (useStorage == null || useStorage.isBlank()) {
             throw new SecurityException("ADF UseStorage permission is required");
         }
+        try {
+            ensureDeviceRootExists(deviceRoot());
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to initialize SD card root", exception);
+        }
     }
 
     public static Path deviceRoot() {
@@ -73,6 +78,11 @@ public final class DoJaStorageHost {
 
     public static Path bindingRoot() {
         return deviceRoot().resolve(SD_BIND_DIRECTORY_NAME);
+    }
+
+    public static Path ensureDeviceRootExists(Path root) throws IOException {
+        Files.createDirectories(root);
+        return root;
     }
 
     public static String[] getCapabilities(String category) {

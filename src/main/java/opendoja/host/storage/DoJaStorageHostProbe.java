@@ -41,6 +41,7 @@ public final class DoJaStorageHostProbe {
         System.setProperty("java.awt.headless", "true");
         OpenDoJaLog.configure(OpenDoJaLog.Level.WARN);
 
+        verifyDeviceRootCreationHelper();
         verifyBundledGundamMapping();
         verifyBundledRockmanMapping();
         verifyRuntimeStorageContract();
@@ -48,6 +49,13 @@ public final class DoJaStorageHostProbe {
         verifyOptionalRockmanStorageIoContract();
 
         System.out.println("DoJa storage host probe OK");
+    }
+
+    private static void verifyDeviceRootCreationHelper() throws Exception {
+        Path root = Files.createTempDirectory("sd-device-root-probe").resolve("storage").resolve("ext0");
+        Path actual = DoJaStorageHost.ensureDeviceRootExists(root);
+        check(actual.equals(root), "device root helper should return the requested path");
+        check(Files.isDirectory(root), "device root helper should create ext0 on demand");
     }
 
     private static void verifyBundledGundamMapping() {
@@ -80,6 +88,8 @@ public final class DoJaStorageHostProbe {
 
         try {
             StorageDevice device = StorageDevice.getInstance(DoJaStorageHost.EXTERNAL_DEVICE_NAME);
+            check(Files.isDirectory(DoJaStorageHost.deviceRoot()),
+                    "requesting the storage device should materialize ext0 before folder access");
             check(hasCapability(device.getCapability(null), StorageDevice.CAPABILITY_SD_BINDING),
                     "all-capabilities query should expose SD-Binding");
             check(hasCapability(device.getCapability(StorageDevice.CATEGORY_ENCRYPTION), StorageDevice.CAPABILITY_SD_BINDING),
@@ -88,6 +98,8 @@ public final class DoJaStorageHostProbe {
             DoJaAccessToken token = DoJaStorageService.getAccessToken(
                     BRIDGE_ACCESS_MASK,
                     DoJaStorageService.SHARE_APPLICATION);
+            check(Files.isDirectory(DoJaStorageHost.deviceRoot()),
+                    "requesting a storage token should keep ext0 materialized");
             Folder folder = device.getFolder(token);
             Path namespaceRoot = DoJaStorageHost.resolveNamespaceRoot(token);
 

@@ -1,5 +1,7 @@
 package com.nttdocomo.util;
 
+import opendoja.host.DoJaEncoding;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,8 +26,9 @@ import java.util.zip.ZipInputStream;
  * treated as a format violation and an exception may occur.
  * Even if the JAR file is signed, the signature is not verified.</p>
  *
- * <p>Minimum specification: only entry names composed of ASCII characters and
- * using {@code '/'} as the directory separator are supported.</p>
+ * <p>Entry names are decoded as UTF-8 when the ZIP archive marks them as such;
+ * otherwise the host DoJa charset is used so legacy Shift_JIS-authored
+ * archives remain loadable.</p>
  *
  * <p>Introduced in DoJa-3.0 (505i).</p>
  */
@@ -64,7 +67,7 @@ public class JarInflater {
         if (data == null) {
             throw new NullPointerException("data");
         }
-        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(data))) {
+        try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(data), DoJaEncoding.defaultCharset())) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
                 if (entry.isDirectory()) {
