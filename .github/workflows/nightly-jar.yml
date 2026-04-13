@@ -28,22 +28,11 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Resolve project version
-        id: project
-        run: |
-          version=$(python - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse("pom.xml").getroot()
-          print(root.find("{http://maven.apache.org/POM/4.0.0}version").text.strip())
-          PY
-          )
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
       - name: Build standalone JAR
         run: mvn -B -DskipTests package
 
       - name: Prepare nightly asset
-        run: cp target/opendoja-${{ steps.project.outputs.version }}.jar target/opendoja-nightly.jar
+        run: cp -- "$(bash scripts/find-release-jar.sh target)" target/opendoja-nightly.jar
 
       - name: Move nightly tag
         shell: bash

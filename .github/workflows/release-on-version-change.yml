@@ -26,24 +26,13 @@ jobs:
         id: version
         shell: bash
         run: |
-          current_version=$(python - <<'PY'
-          import xml.etree.ElementTree as ET
-          root = ET.parse("pom.xml").getroot()
-          print(root.find("{http://maven.apache.org/POM/4.0.0}version").text.strip())
-          PY
-          )
+          current_version=$(python3 scripts/project-version.py pom.xml)
 
           previous_version=""
           if git rev-parse HEAD^ >/dev/null 2>&1; then
             previous_pom=$(mktemp)
             git show HEAD^:pom.xml > "$previous_pom"
-            previous_version=$(python - "$previous_pom" <<'PY'
-          import sys
-          import xml.etree.ElementTree as ET
-          root = ET.parse(sys.argv[1]).getroot()
-          print(root.find("{http://maven.apache.org/POM/4.0.0}version").text.strip())
-          PY
-            )
+            previous_version=$(python3 scripts/project-version.py "$previous_pom")
             rm -f "$previous_pom"
           fi
 
@@ -52,9 +41,9 @@ jobs:
             version_changed=true
           fi
 
-          echo "current_version=$current_version" >> "$GITHUB_OUTPUT"
-          echo "previous_version=$previous_version" >> "$GITHUB_OUTPUT"
-          echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
+          printf 'current_version=%s\n' "$current_version" >> "$GITHUB_OUTPUT"
+          printf 'previous_version=%s\n' "$previous_version" >> "$GITHUB_OUTPUT"
+          printf 'version_changed=%s\n' "$version_changed" >> "$GITHUB_OUTPUT"
 
   build-and-release:
     needs: detect-version-change
@@ -75,10 +64,13 @@ jobs:
       - name: Build release JAR
         run: mvn -B -DskipTests package
 
+      - name: Prepare release asset
+        run: cp -- "$(bash scripts/find-release-jar.sh target)" target/opendoja-release.jar
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.detect-version-change.outputs.current_version }}
           name: openDoJa v${{ needs.detect-version-change.outputs.current_version }}
           generate_release_notes: true
-          files: target/opendoja-${{ needs.detect-version-change.outputs.current_version }}.jar
+          files: target/opendoja-release.jar
