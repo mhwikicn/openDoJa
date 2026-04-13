@@ -1593,9 +1593,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         DoJaRuntime runtime = DoJaRuntime.current();
         if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
             // DoJa documents `Graphics3D.flush()` as applying pending 3D results, not as a
-            // display-sync boundary. Titles like Chase HQ 3D split one Canvas frame into several
-            // opt passes, so syncing every flush would multiply the frame time. Keep the pass
-            // boundary semantics here, but leave frame pacing to the eventual Canvas present.
+            // display-sync boundary. Some titles split one Canvas frame into several opt passes,
+            // so syncing every flush would multiply the frame time. Keep the pass boundary
+            // semantics here, but leave frame pacing to the eventual Canvas present.
             surface.endDepthFrame();
             return;
         }
