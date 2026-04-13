@@ -7,6 +7,8 @@ import opendoja.host.DesktopVideoSupport;
 import opendoja.host.DoJaRuntime;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
 import javax.microedition.io.Connector;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
@@ -18,8 +20,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -107,9 +112,9 @@ public final class MediaManager {
      */
     public static MediaImage getImage(byte[] data) {
         byte[] bytes = data == null ? new byte[0] : data.clone();
-        java.awt.image.BufferedImage bufferedImage = decodeStillImage(bytes);
-        if (bufferedImage != null) {
-            return new BasicMediaImage(bufferedImage);
+        MediaImage decodedImage = decodeMediaImage(bytes);
+        if (decodedImage != null) {
+            return decodedImage;
         }
         DesktopVideoSupport.VideoMetadata video = DesktopVideoSupport.probe(bytes);
         if (video.isVideo()) {
@@ -278,9 +283,43 @@ public final class MediaManager {
         return out.toByteArray();
     }
 
-    private static java.awt.image.BufferedImage decodeStillImage(byte[] data) {
-        try (ByteArrayInputStream in = new ByteArrayInputStream(data)) {
-            return ImageIO.read(in);
+    private static MediaImage decodeMediaImage(byte[] data) {
+        try (ImageInputStream in = ImageIO.createImageInputStream(new ByteArrayInputStream(data))) {
+            if (in == null) {
+                return null;
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+            if (!readers.hasNext()) {
+                return null;
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(in, false, false);
+                List<DesktopImage> frames = new ArrayList<>();
+                for (int index = 0; ; index++) {
+                    java.awt.image.BufferedImage bufferedImage;
+                    try {
+                        bufferedImage = reader.read(index);
+                    } catch (IndexOutOfBoundsException e) {
+                        break;
+                    }
+                    if (bufferedImage == null) {
+                        break;
+                    }
+                    frames.add(new DesktopImage(bufferedImage));
+                }
+                if (frames.isEmpty()) {
+                    return null;
+                }
+                // Animated GIF-backed MediaImage objects need stable per-frame access for
+                // Graphics2.drawNthImage(...), while still images keep the original single-image path.
+                if (frames.size() == 1) {
+                    return new BasicMediaImage(frames.get(0));
+                }
+                return new AnimatedMediaImage(frames.toArray(DesktopImage[]::new));
+            } finally {
+                reader.dispose();
+            }
         } catch (IOException e) {
             return null;
         }
@@ -347,11 +386,11 @@ public final class MediaManager {
     static abstract class AbstractMediaResource implements MediaResource {
         private final Map<String, String> properties = new HashMap<>();
         private boolean redistributable = true;
-        private boolean used;
+        private int state = MediaResource.UNUSE;
 
         @Override
         public void use() throws ConnectionException {
-            used = true;
+            state = MediaResource.USE;
         }
 
         @Override
@@ -361,12 +400,12 @@ public final class MediaManager {
 
         @Override
         public void unuse() {
-            used = false;
+            state = MediaResource.UNUSE;
         }
 
         @Override
         public void dispose() {
-            used = false;
+            state = MediaResource.DISPOSE;
         }
 
         @Override
@@ -391,7 +430,11 @@ public final class MediaManager {
         }
 
         final boolean isUsed() {
-            return used;
+            return state == MediaResource.USE;
+        }
+
+        final int state() {
+            return state;
         }
     }
 
@@ -442,6 +485,48 @@ public final class MediaManager {
         @Override
         public void setExifData(ExifData exifData) {
             this.exifData = exifData == null ? new ExifData() : exifData;
+        }
+    }
+
+    static final class AnimatedMediaImage extends AbstractMediaResource implements MediaImage {
+        private final DesktopImage[] frames;
+        private ExifData exifData = new ExifData();
+
+        AnimatedMediaImage(DesktopImage[] frames) {
+            this.frames = frames.clone();
+        }
+
+        @Override
+        public int getWidth() {
+            return frames[0].getWidth();
+        }
+
+        @Override
+        public int getHeight() {
+            return frames[0].getHeight();
+        }
+
+        @Override
+        public Image getImage() {
+            return frames[0];
+        }
+
+        @Override
+        public ExifData getExifData() {
+            return exifData;
+        }
+
+        @Override
+        public void setExifData(ExifData exifData) {
+            this.exifData = exifData == null ? new ExifData() : exifData;
+        }
+
+        int frameCount() {
+            return frames.length;
+        }
+
+        Image frame(int index) {
+            return frames[index];
         }
     }
 

@@ -4,10 +4,10 @@ import com.nttdocomo.opt.ui.j3d.AffineTrans;
 import com.nttdocomo.ui.Graphics;
 import com.nttdocomo.ui.Image;
 import com.nttdocomo.ui.MediaImage;
-import com.nttdocomo.ui.UIException;
 import opendoja.host.DesktopSurface;
 import opendoja.host.DoJaRuntime;
 
+import java.awt.geom.AffineTransform;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -131,11 +131,10 @@ public class Graphics2 extends Graphics {
      * @return the captured image
      */
     public Image getImage(int x, int y, int width, int height) {
-        int actualX = actualCoordinateX(x);
-        int actualY = actualCoordinateY(y);
-        int actualW = coordinateMode == CM_ZOOM ? java.lang.Math.max(1, width / 256) : width;
-        int actualH = coordinateMode == CM_ZOOM ? java.lang.Math.max(1, height / 256) : height;
-        return getImageRegion(actualX - getOriginX(), actualY - getOriginY(), actualW, actualH);
+        if (width <= 0 || height <= 0) {
+            throw new IllegalArgumentException("width");
+        }
+        return getImageRegion(actualCoordinateX(x) - getOriginX(), actualCoordinateY(y) - getOriginY(), width, height);
     }
 
     /**
@@ -168,16 +167,7 @@ public class Graphics2 extends Graphics {
      * @param y the y coordinate
      */
     public void drawNthImage(MediaImage image, int k, int x, int y) {
-        if (image == null) {
-            throw new NullPointerException("image");
-        }
-        if (k != 0) {
-            throw new IllegalArgumentException("k");
-        }
-        Image plainImage = image.getImage();
-        if (plainImage == null) {
-            throw new UIException(UIException.ILLEGAL_STATE);
-        }
+        Image plainImage = resolveNthMediaImageFrame(image, k);
         super.drawImage(plainImage, actualCoordinateX(x) - getOriginX(), actualCoordinateY(y) - getOriginY());
     }
 
@@ -188,6 +178,9 @@ public class Graphics2 extends Graphics {
      */
     public void drawSpriteSet(SpriteSet sprites) {
         if (sprites == null) {
+            throw new NullPointerException("sprites");
+        }
+        if (sprites.getCount() == 0) {
             throw new NullPointerException("sprites");
         }
         drawSpriteSet(sprites, 0, sprites.getCount());
@@ -204,6 +197,9 @@ public class Graphics2 extends Graphics {
         if (sprites == null) {
             throw new NullPointerException("sprites");
         }
+        if (sprites.getCount() == 0) {
+            throw new NullPointerException("sprites");
+        }
         if (offset < 0 || count < 0 || offset + count > sprites.getCount()) {
             throw new ArrayIndexOutOfBoundsException();
         }
@@ -212,6 +208,7 @@ public class Graphics2 extends Graphics {
             if (sprite == null || sprite.image() == null) {
                 throw new NullPointerException("sprite");
             }
+            ensureImageNotDisposed(sprite.image());
             if (!sprite.isVisible()) {
                 continue;
             }
@@ -260,14 +257,14 @@ public class Graphics2 extends Graphics {
         if (image == null || at == null) {
             throw new NullPointerException();
         }
-        int[][] transformed = transformQuad(at, width, height);
-        int[] points = {
-                transformed[0][0], transformed[0][1],
-                transformed[1][0], transformed[1][1],
-                transformed[2][0], transformed[2][1],
-                transformed[3][0], transformed[3][1]
-        };
-        super.drawImage(image, points, x, y, width, height);
+        ensureImageNotDisposed(image);
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("width");
+        }
+        if (width == 0 || height == 0) {
+            return;
+        }
+        drawAffineImageValidated(image, createAffineTransform(at), x, y, width, height);
     }
 
     /**
@@ -280,7 +277,10 @@ public class Graphics2 extends Graphics {
         if (image == null || at == null) {
             throw new NullPointerException();
         }
-        drawImage(image, at, 0, 0, image.getWidth(), image.getHeight());
+        ensureImageNotDisposed(image);
+        int width = image.getWidth();
+        int height = image.getHeight();
+        drawAffineImageValidated(image, createAffineTransform(at), 0, 0, width, height);
     }
 
     /**
@@ -341,18 +341,22 @@ public class Graphics2 extends Graphics {
         return ((255 - ratio) * left + ratio * right) / 255;
     }
 
-    private int[][] transformQuad(AffineTrans at, int width, int height) {
-        return new int[][]{
-                apply(at, 0, 0),
-                apply(at, width, 0),
-                apply(at, width, height),
-                apply(at, 0, height)
-        };
-    }
-
-    private int[] apply(AffineTrans at, int x, int y) {
-        int tx = (at.m00 * x + at.m01 * y + at.m03) / 4096;
-        int ty = (at.m10 * x + at.m11 * y + at.m13) / 4096;
-        return new int[]{actualCoordinateX(tx) - getOriginX(), actualCoordinateY(ty) - getOriginY()};
+    private AffineTransform createAffineTransform(AffineTrans at) {
+        double scale = coordinateMode == CM_ZOOM ? (1.0 / 256.0) : 1.0;
+        double translateX = (at.m02 / 4096.0) * scale;
+        double translateY = (at.m12 / 4096.0) * scale;
+        if (coordinateMode == CM_ZOOM) {
+            // CM_ZOOM applies after the 2D affine result is produced from m00/m01/m02 and
+            // m10/m11/m12, so fold the 1/256 scale and requested origin into the local transform.
+            translateX -= (255.0 * requestedOriginX) / 256.0;
+            translateY -= (255.0 * requestedOriginY) / 256.0;
+        }
+        return new AffineTransform(
+                (at.m00 / 4096.0) * scale,
+                (at.m10 / 4096.0) * scale,
+                (at.m01 / 4096.0) * scale,
+                (at.m11 / 4096.0) * scale,
+                translateX,
+                translateY);
     }
 }

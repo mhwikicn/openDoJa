@@ -663,29 +663,32 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     protected final Image getImageRegion(int x, int y, int width, int height) {
         if (width <= 0 || height <= 0) {
-            return Image.createImage(1, 1);
+            return null;
         }
         int srcX = Math.max(0, originX + x);
         int srcY = Math.max(0, originY + y);
-        int srcWidth = Math.max(0, java.lang.Math.min(width, surface.width() - srcX));
-        int srcHeight = Math.max(0, java.lang.Math.min(height, surface.height() - srcY));
-        BufferedImage copy = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-        if (srcWidth > 0 && srcHeight > 0) {
-            Graphics2D g2 = copy.createGraphics();
-            try {
-                g2.drawImage(surface.image(),
-                        0,
-                        0,
-                        srcWidth,
-                        srcHeight,
-                        srcX,
-                        srcY,
-                        srcX + srcWidth,
-                        srcY + srcHeight,
-                        null);
-            } finally {
-                g2.dispose();
-            }
+        int srcRight = Math.min(originX + x + width, surface.width());
+        int srcBottom = Math.min(originY + y + height, surface.height());
+        int srcWidth = srcRight - srcX;
+        int srcHeight = srcBottom - srcY;
+        if (srcWidth <= 0 || srcHeight <= 0) {
+            return null;
+        }
+        BufferedImage copy = new BufferedImage(srcWidth, srcHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = copy.createGraphics();
+        try {
+            g2.drawImage(surface.image(),
+                    0,
+                    0,
+                    srcWidth,
+                    srcHeight,
+                    srcX,
+                    srcY,
+                    srcX + srcWidth,
+                    srcY + srcHeight,
+                    null);
+        } finally {
+            g2.dispose();
         }
         return new DesktopImage(copy);
     }
@@ -1225,7 +1228,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     public void drawImage(Image image, int[] matrix, int sx, int sy, int width, int height) {
         validateAffineImageArguments(image, matrix);
         validateAffineImageRegion(width, height);
-        drawAffineImageValidated(image, matrix, sx, sy, width, height);
+        drawAffineImageValidated(image, createDoJaAffineTransform(matrix), sx, sy, width, height);
     }
 
     /**
@@ -1233,10 +1236,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     public void drawImage(Image image, int[] matrix) {
         validateAffineImageArguments(image, matrix);
-        drawAffineImageValidated(image, matrix, 0, 0, image.getWidth(), image.getHeight());
+        drawAffineImageValidated(image, createDoJaAffineTransform(matrix), 0, 0, image.getWidth(), image.getHeight());
     }
 
-    private void drawAffineImageValidated(Image image, int[] matrix, int sx, int sy, int width, int height) {
+    protected final void drawAffineImageValidated(Image image, AffineTransform localTransform, int sx, int sy, int width, int height) {
         BufferedImage source = image.renderForDisplay();
         if (source == null) {
             return;
@@ -1260,11 +1263,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 clippedSrcX2 - clippedSrcX1,
                 clippedSrcY2 - clippedSrcY1);
 
-        // The DoJa overload takes a six-element 4.12 fixed-point affine matrix, not destination
-        // corner points. When the requested source rectangle falls partly outside the image, keep
-        // the remaining pixels at their original local coordinates instead of scaling them to fill
-        // the full target area.
-        AffineTransform localTransform = createDoJaAffineTransform(matrix);
+        // Keep clipped source pixels at their original local coordinates instead of stretching
+        // the visible remainder to fill the full requested region.
         localTransform.translate(clippedSrcX1 - srcX1, clippedSrcY1 - srcY1);
         Rectangle localBounds = transformedBounds(localTransform, clippedSource.getWidth(), clippedSource.getHeight());
         AffineTransform oldTransform = delegate.getTransform();
@@ -1325,7 +1325,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         }
     }
 
-    private static AffineTransform createDoJaAffineTransform(int[] matrix) {
+    protected static final AffineTransform createDoJaAffineTransform(int[] matrix) {
         return new AffineTransform(
                 matrix[0] / DOJAAFFINE_FIXED_POINT_SCALE,
                 matrix[3] / DOJAAFFINE_FIXED_POINT_SCALE,
@@ -1333,6 +1333,31 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 matrix[4] / DOJAAFFINE_FIXED_POINT_SCALE,
                 matrix[2] / DOJAAFFINE_FIXED_POINT_SCALE,
                 matrix[5] / DOJAAFFINE_FIXED_POINT_SCALE);
+    }
+
+    protected final void ensureImageNotDisposed(Image image) {
+        if (image instanceof DesktopImage desktopImage) {
+            desktopImage.ensureNotDisposed();
+        }
+    }
+
+    protected final Image resolveNthMediaImageFrame(MediaImage image, int k) {
+        if (image == null) {
+            throw new NullPointerException("image");
+        }
+        if (image instanceof MediaManager.AbstractMediaResource tracked && tracked.state() != MediaResource.USE) {
+            throw new UIException(UIException.ILLEGAL_STATE);
+        }
+        if (image instanceof MediaManager.AnimatedMediaImage animated) {
+            if (k < 0 || k >= animated.frameCount()) {
+                throw new IllegalArgumentException("k");
+            }
+            return animated.frame(k);
+        }
+        if (k != 0) {
+            throw new IllegalArgumentException("k");
+        }
+        return image.getImage();
     }
 
     private static Rectangle transformedBounds(AffineTransform transform, int width, int height) {
