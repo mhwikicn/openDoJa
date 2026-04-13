@@ -18,6 +18,10 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public final class MidiEventPlayer implements AutoCloseable {
+    // This is not a DoJa limit. It keeps this lightweight dispatcher scoped to
+    // one-shot effects; longer MIDI belongs on Sequencer so we preserve full
+    // song semantics such as tempo maps, looping, seeking, pause/restart, and
+    // sync behavior.
     private static final long MAX_DIRECT_MIDI_MICROS = 1_000_000L;
     private static final ScheduledExecutorService MIDI_EVENTS = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "opendoja-midi-events");
