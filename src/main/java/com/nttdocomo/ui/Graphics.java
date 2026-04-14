@@ -18,6 +18,7 @@ import opendoja.g3d.Software3DContext;
 import opendoja.g3d.SoftwareTexture;
 import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
+import opendoja.host.ogl._OglExtensionMatrixState;
 import com.nttdocomo.ui.util3d.Transform;
 
 import java.awt.AlphaComposite;
@@ -359,10 +360,14 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_MODELVIEW,
                     com.nttdocomo.ui.ogl.GraphicsOGL.GL_PROJECTION,
                     com.nttdocomo.ui.ogl.GraphicsOGL.GL_TEXTURE,
-                    com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES,
-                    1,
-                    2 -> ogl.matrixMode = mode;
-            default -> ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+                    com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES -> ogl.matrixMode = mode;
+            default -> {
+                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
+                    ogl.matrixMode = mode;
+                } else {
+                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+                }
+            }
         }
     }
 
@@ -2999,9 +3004,13 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_TEXTURE -> ogl.textureMatrix = matrix;
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES ->
                     ogl.paletteMatrices[ogl.currentPaletteMatrix] = matrix;
-            case 1 -> ogl.acrodeaWorldMatrix = matrix;
-            case 2 -> ogl.acrodeaCameraMatrix = matrix;
-            default -> ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+            default -> {
+                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
+                    ogl.extensionMatrixState.loadMatrix(mode, matrix);
+                } else {
+                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+                }
+            }
         }
     }
 
@@ -3021,11 +3030,13 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                     ogl.paletteMatrices[ogl.currentPaletteMatrix] = multiplyMatrices(
                             ogl.paletteMatrices[ogl.currentPaletteMatrix],
                             matrix);
-            case 1 -> ogl.acrodeaWorldMatrix = multiplyMatrices(ogl.acrodeaWorldMatrix, matrix);
-            case 2 -> ogl.acrodeaCameraMatrix = multiplyMatrices(
-                    ogl.acrodeaCameraMatrix == null ? OglState.identityMatrix() : ogl.acrodeaCameraMatrix,
-                    matrix);
-            default -> ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+            default -> {
+                if (ogl.extensionMatrixState.acceptsMatrixMode(ogl.matrixMode)) {
+                    ogl.extensionMatrixState.multiplyMatrix(ogl.matrixMode, matrix);
+                } else {
+                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+                }
+            }
         }
     }
 
@@ -3051,10 +3062,13 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_TEXTURE -> ogl.textureStack.push(ogl.textureMatrix.clone());
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES ->
                     ogl.paletteMatrixStacks[ogl.currentPaletteMatrix].push(ogl.paletteMatrices[ogl.currentPaletteMatrix].clone());
-            case 1 -> ogl.acrodeaWorldStack.push(ogl.acrodeaWorldMatrix.clone());
-            case 2 -> ogl.acrodeaCameraStack.push(
-                    (ogl.acrodeaCameraMatrix == null ? OglState.identityMatrix() : ogl.acrodeaCameraMatrix).clone());
-            default -> ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+            default -> {
+                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
+                    ogl.extensionMatrixState.pushMatrix(mode);
+                } else {
+                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
+                }
+            }
         }
     }
 
@@ -3090,21 +3104,15 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 }
                 ogl.paletteMatrices[ogl.currentPaletteMatrix] = ogl.paletteMatrixStacks[ogl.currentPaletteMatrix].pop();
             }
-            case 1 -> {
-                if (ogl.acrodeaWorldStack.isEmpty()) {
-                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_STACK_UNDERFLOW;
-                    return;
+            default -> {
+                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
+                    if (!ogl.extensionMatrixState.popMatrix(mode)) {
+                        ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_STACK_UNDERFLOW;
+                    }
+                } else {
+                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
                 }
-                ogl.acrodeaWorldMatrix = ogl.acrodeaWorldStack.pop();
             }
-            case 2 -> {
-                if (ogl.acrodeaCameraStack.isEmpty()) {
-                    ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_STACK_UNDERFLOW;
-                    return;
-                }
-                ogl.acrodeaCameraMatrix = ogl.acrodeaCameraStack.pop();
-            }
-            default -> ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
         }
     }
 
@@ -3302,8 +3310,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 }
             }
         }
-        boolean useAcrodeaMatrices = positionSize >= 3 && ogl.usesAcrodeaMatrices();
-        transformVertex(clipVector, eyeVectorTemp, x, y, z, vertexIndex, useAcrodeaMatrices);
+        boolean useExtensionMatrices = positionSize >= 3 && ogl.usesExtensionMatrices();
+        transformVertex(clipVector, eyeVectorTemp, x, y, z, vertexIndex, useExtensionMatrices);
         float w = Math.abs(clipVector.w) < 0.000001f ? (clipVector.w < 0f ? -0.000001f : 0.000001f) : clipVector.w;
         float ndcX = clipVector.x / w;
         float ndcY = clipVector.y / w;
@@ -3399,7 +3407,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 ogl.materialShininess);
     }
 
-    private void transformVertex(ClipVector target, ClipVector eyeTarget, float x, float y, float z, int vertexIndex, boolean useAcrodeaMatrices) {
+    private void transformVertex(ClipVector target, ClipVector eyeTarget, float x, float y, float z, int vertexIndex, boolean useExtensionMatrices) {
         if (ogl.usesMatrixPalette()) {
             float eyeX = 0f;
             float eyeY = 0f;
@@ -3438,10 +3446,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 return;
             }
         }
-        if (useAcrodeaMatrices) {
-            multiply(clipVectorTemp, ogl.acrodeaWorldMatrix, x, y, z, 1f);
+        if (useExtensionMatrices) {
+            multiply(clipVectorTemp, ogl.extensionMatrixState.worldMatrix(), x, y, z, 1f);
             eyeTarget.set(clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
-            multiply(target, ogl.acrodeaCameraMatrix, clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
+            multiply(target, ogl.extensionMatrixState.cameraMatrix(), clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
             return;
         }
         multiply(eyeTarget, ogl.modelViewMatrix, x, y, z, 1f);
@@ -5196,14 +5204,11 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         private final float[][] paletteMatrices = new float[OGL_MAX_PALETTE_MATRICES][];
         private boolean standardModelViewConfigured;
         private boolean standardProjectionConfigured;
-        private float[] acrodeaWorldMatrix = identityMatrix();
-        private float[] acrodeaCameraMatrix;
+        private final _OglExtensionMatrixState extensionMatrixState = new _OglExtensionMatrixState();
         private int currentPaletteMatrix;
         private final Deque<float[]> modelViewStack = new ArrayDeque<>();
         private final Deque<float[]> projectionStack = new ArrayDeque<>();
         private final Deque<float[]> textureStack = new ArrayDeque<>();
-        private final Deque<float[]> acrodeaWorldStack = new ArrayDeque<>();
-        private final Deque<float[]> acrodeaCameraStack = new ArrayDeque<>();
         private final Deque<float[]>[] paletteMatrixStacks = createPaletteMatrixStacks();
         private OglPointer vertexPointer;
         private OglPointer texCoordPointer;
@@ -5291,8 +5296,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         void beginDrawing() {
             standardModelViewConfigured = false;
             standardProjectionConfigured = false;
-            acrodeaWorldMatrix = identityMatrix();
-            acrodeaCameraMatrix = null;
+            extensionMatrixState.beginDrawing();
         }
 
         void endDrawing() {
@@ -5318,8 +5322,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             return colorMaterialEnabled;
         }
 
-        boolean usesAcrodeaMatrices() {
-            return acrodeaCameraMatrix != null && !standardModelViewConfigured && !standardProjectionConfigured;
+        boolean usesExtensionMatrices() {
+            return extensionMatrixState.usesMatrices(standardModelViewConfigured, standardProjectionConfigured);
         }
 
         boolean usesMatrixPalette() {
