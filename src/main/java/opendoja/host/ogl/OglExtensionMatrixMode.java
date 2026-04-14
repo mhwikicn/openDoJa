@@ -1,6 +1,6 @@
 package opendoja.host.ogl;
 
-enum _OglExtensionMatrixMode {
+enum OglExtensionMatrixMode {
     ACRODEA_WORLD(Vendor.ACRODEA, 1),
     ACRODEA_CAMERA(Vendor.ACRODEA, 2);
 
@@ -11,7 +11,7 @@ enum _OglExtensionMatrixMode {
     private final Vendor vendor;
     private final int glMatrixMode;
 
-    _OglExtensionMatrixMode(Vendor vendor, int glMatrixMode) {
+    OglExtensionMatrixMode(Vendor vendor, int glMatrixMode) {
         this.vendor = vendor;
         this.glMatrixMode = glMatrixMode;
     }
@@ -24,8 +24,8 @@ enum _OglExtensionMatrixMode {
         return glMatrixMode;
     }
 
-    static _OglExtensionMatrixMode fromGlMatrixMode(int glMatrixMode) {
-        for (_OglExtensionMatrixMode mode : values()) {
+    static OglExtensionMatrixMode fromGlMatrixMode(int glMatrixMode) {
+        for (OglExtensionMatrixMode mode : values()) {
             if (mode.glMatrixMode == glMatrixMode) {
                 return mode;
             }

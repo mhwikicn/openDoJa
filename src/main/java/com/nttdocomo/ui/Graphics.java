@@ -1,25 +1,18 @@
 package com.nttdocomo.ui;
 
 import com.nttdocomo.lang.XString;
-import com.nttdocomo.opt.ui.j3d._Opt3DInternalAccess;
-import com.nttdocomo.opt.ui.j3d.PrimitiveArray;
-import com.nttdocomo.ui.graphics3d._Graphics3DInternalAccess;
-import com.nttdocomo.ui.graphics3d._PrimitiveRenderStateAccess;
 import com.nttdocomo.ui.ogl.ByteBuffer;
 import com.nttdocomo.ui.ogl.DirectBuffer;
 import com.nttdocomo.ui.ogl.DirectBufferFactory;
 import com.nttdocomo.ui.ogl.FloatBuffer;
 import com.nttdocomo.ui.ogl.IntBuffer;
 import com.nttdocomo.ui.ogl.ShortBuffer;
-import com.nttdocomo.ui.util3d._TransformInternalAccess;
 import opendoja.host.DesktopSurface;
-import opendoja.g3d.MascotFigure;
-import opendoja.g3d.Software3DContext;
-import opendoja.g3d.SoftwareTexture;
+import opendoja.g3d.DojaGraphics3DRenderer;
+import opendoja.g3d.OptJ3DRenderer;
 import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
-import opendoja.host.ogl._OglExtensionMatrixState;
-import com.nttdocomo.ui.util3d.Transform;
+import opendoja.host.ogl.OglRenderer;
 
 import java.awt.AlphaComposite;
 import java.awt.Color;
@@ -47,23 +40,12 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private static final boolean TRACE_FAILURES = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.TRACE_FAILURES);
     private static final boolean TRACE_3D_CALLS = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.DEBUG3D_CALLS);
     private static final double DOJAAFFINE_FIXED_POINT_SCALE = 4096.0;
-    private static final int LEGACY_OPT_COMMAND_LIST_VERSION_1 = 1;
     private static final int OPT_RENDER_OP_REPL = 0;
     private static final int OPT_RENDER_OP_ADD = 1;
     private static final int OPT_RENDER_OP_SUB = 2;
     private static final int OGL_TEXTURE_UNIT_COUNT = 1;
     private static final int OGL_MAX_VERTEX_UNITS = 8;
     private static final int OGL_MAX_PALETTE_MATRICES = 32;
-    private static final int OPT_COMMAND_PREFIX_MASK = 0xFF00_0000;
-    private static final int OPT_COMMAND_INLINE_VALUE_MASK = 0x00FF_FFFF;
-    private static final int OPT_COMMAND_RENDER_COUNT_MASK = 0x00FF_0000;
-    private static final int OPT_COMMAND_ATTR_MASK =
-            com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_LIGHT
-                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_SPHERE_MAP
-                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_COLOR_KEY
-                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_HALF
-                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_ADD
-                    | com.nttdocomo.opt.ui.j3d.Graphics3D.ATTR_BLEND_SUB;
     /**
      * Constant for black.
      */
@@ -163,7 +145,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
 
     private final DesktopSurface surface;
     private Graphics2D delegate;
-    private final Software3DContext threeD = new Software3DContext();
+    private final DojaGraphics3DRenderer doja3D = new DojaGraphics3DRenderer(TRACE_3D_CALLS);
+    private final OptJ3DRenderer opt3D = new OptJ3DRenderer(doja3D.context(), TRACE_3D_CALLS);
+    private final OglRenderer oglRenderer = new OglRenderer();
     private boolean pendingOptRenderedContent;
     private int originX;
     private int originY;
@@ -171,16 +155,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     private Font font = Font.getDefaultFont();
     private int flipMode = FLIP_NONE;
     private boolean pictoColorEnabled;
-    private com.nttdocomo.ui.graphics3d.Fog uiFog;
     private int oglClearColor = 0xFF000000;
-    private boolean optSphereMapEnabled;
-    private SoftwareTexture optSphereTexture;
-    private boolean optToonShaderEnabled;
-    private int optToonThreshold = 128;
-    private int optToonMid = 255;
-    private int optToonShadow = 96;
-    private com.nttdocomo.opt.ui.j3d.AffineTrans[] optViewTransforms = new com.nttdocomo.opt.ui.j3d.AffineTrans[0];
-    private final OglState ogl = new OglState();
+    private final OglState ogl = new OglState(oglRenderer);
     private final ClipVector clipVectorTemp = new ClipVector();
     private final ClipVector eyeVectorTemp = new ClipVector();
     private final ClipVector normalVectorTemp = new ClipVector();
@@ -207,7 +183,6 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         ogl.viewportWidth = surface.width();
         ogl.viewportHeight = surface.height();
         clearClip();
-        syncOptRendererState();
     }
 
     static Graphics createPlatformGraphics(DesktopSurface surface) {
@@ -267,15 +242,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         copy.delegate.setColor(new Color(color, true));
         copy.delegate.setFont(font.awtFont());
         copy.pictoColorEnabled = pictoColorEnabled;
-        copy.uiFog = uiFog;
-        copy.optSphereMapEnabled = optSphereMapEnabled;
-        copy.optSphereTexture = optSphereTexture;
-        copy.optToonShaderEnabled = optToonShaderEnabled;
-        copy.optToonThreshold = optToonThreshold;
-        copy.optToonMid = optToonMid;
-        copy.optToonShadow = optToonShadow;
-        copy.syncUiFogState();
-        copy.syncOptRendererState();
+        copy.doja3D.copyStateFrom(doja3D);
+        copy.opt3D.copyStateFrom(opt3D);
         return copy;
     }
 
@@ -362,7 +330,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                     com.nttdocomo.ui.ogl.GraphicsOGL.GL_TEXTURE,
                     com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES -> ogl.matrixMode = mode;
             default -> {
-                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
+                if (ogl.renderer.acceptsExtensionMatrixMode(mode)) {
                     ogl.matrixMode = mode;
                 } else {
                     ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
@@ -1270,7 +1238,6 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         } else {
             delegate.setClip(clip);
         }
-        syncOptRendererState();
     }
 
     /**
@@ -2221,14 +2188,24 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void flushPending3DPasses() {
-        threeD.flushPendingOptPrimitiveBlends(delegate, surface.image());
+        doja3D.flushPendingOptPrimitiveBlends(delegate, surface.image());
     }
 
     private void prepare3DDepthFrame() {
         // Games can submit 3D assets through separate 3D calls inside one
         // lock/unlock frame. They must share one z-buffer or later props ignore ramp depth.
         pendingOptRenderedContent = true;
-        threeD.setFrameDepthBuffer(surface.depthBufferForFrame());
+        doja3D.setFrameDepthBuffer(surface.depthBufferForFrame());
+    }
+
+    private DojaGraphics3DRenderer.RenderTarget renderTarget() {
+        return new DojaGraphics3DRenderer.RenderTarget(
+                delegate,
+                surface.image(),
+                originX,
+                originY,
+                surface.width(),
+                surface.height());
     }
 
     private void applyFlipTransform(int dx, int dy, int dw, int dh) {
@@ -2294,7 +2271,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setClipRectFor3D(int x, int y, int width, int height) {
         try {
-            threeD.setUiClip(originX + x, originY + y, width, height);
+            doja3D.setClipRectFor3D(originX, originY, x, y, width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setClipRectFor3D", e);
         }
@@ -2306,10 +2283,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setParallelView(int width, int height) {
         try {
-            threeD.setUiParallelView(width, height);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setParallelView width=" + width + " height=" + height);
-            }
+            doja3D.setParallelView(width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setParallelView", e);
         }
@@ -2321,10 +2295,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspectiveView(float a, float b, int c, int d) {
         try {
-            threeD.setUiPerspectiveView(a, b, c, d);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspectiveViewWH near=" + a + " far=" + b + " width=" + c + " height=" + d);
-            }
+            doja3D.setPerspectiveView(a, b, c, d);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspectiveView(float,float,int,int)", e);
         }
@@ -2336,10 +2307,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspectiveView(float a, float b, float c) {
         try {
-            threeD.setUiPerspectiveView(a, b, c);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspectiveViewFov near=" + a + " far=" + b + " angle=" + c);
-            }
+            doja3D.setPerspectiveView(a, b, c);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspectiveView(float,float,float)", e);
         }
@@ -2366,11 +2334,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setTransform(com.nttdocomo.ui.util3d.Transform transform) {
         try {
-            float[] matrix = transform == null ? Software3DContext.identity() : _TransformInternalAccess.raw(transform);
-            threeD.setUiTransform(matrix);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setTransform matrix=" + Arrays.toString(matrix));
-            }
+            doja3D.setTransform(transform);
         } catch (RuntimeException e) {
             throw traceFailure("setTransform", e);
         }
@@ -2381,12 +2345,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void addLight(com.nttdocomo.ui.graphics3d.Light light, com.nttdocomo.ui.util3d.Transform transform) {
-        if (light == null) {
-            return;
-        }
         try {
-            _Graphics3DInternalAccess.LightState lightState = _Graphics3DInternalAccess.lightState(light);
-            threeD.addUiLight(lightState.mode(), lightState.intensity(), lightState.color());
+            doja3D.addLight(light);
         } catch (RuntimeException e) {
             throw traceFailure("addLight", e);
         }
@@ -2397,7 +2357,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void resetLights() {
-        threeD.resetUiLights();
+        doja3D.resetLights();
     }
 
     /**
@@ -2405,8 +2365,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setFog(com.nttdocomo.ui.graphics3d.Fog fog) {
-        this.uiFog = fog;
-        syncUiFogState();
+        doja3D.setFog(fog);
     }
 
     /**
@@ -2414,86 +2373,11 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void renderObject3D(com.nttdocomo.ui.graphics3d.DrawableObject3D object, com.nttdocomo.ui.util3d.Transform transform) {
-        if (object == null) {
-            return;
-        }
         try {
-            syncUiFogState();
-            renderObject3DRecursive(object, transform == null ? null : matrixOf(transform));
+            doja3D.renderObject3D(renderTarget(), object, transform, this::prepare3DDepthFrame);
         } catch (RuntimeException e) {
             throw traceFailure("renderObject3D", e);
         }
-    }
-
-    private void renderObject3DRecursive(com.nttdocomo.ui.graphics3d.DrawableObject3D object, float[] objectMatrix) {
-        if (object == null || object.getType() == com.nttdocomo.ui.graphics3d.Object3D.TYPE_NONE) {
-            return;
-        }
-        if (object instanceof com.nttdocomo.ui.graphics3d.Group group) {
-            float[] combined = composeGroupTransform(objectMatrix, group);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call renderObject3D type=Group elements=" + group.getNumElements()
-                        + " transform=" + (combined == null ? "null" : Arrays.toString(combined)));
-            }
-            for (int i = 0; i < group.getNumElements(); i++) {
-                com.nttdocomo.ui.graphics3d.Object3D element = group.getElement(i);
-                if (element instanceof com.nttdocomo.ui.graphics3d.DrawableObject3D drawable) {
-                    renderObject3DRecursive(drawable, combined);
-                }
-            }
-            return;
-        }
-        if (object instanceof com.nttdocomo.ui.graphics3d.Figure figure) {
-            MascotFigure handle = _Graphics3DInternalAccess.handle(figure);
-            _Graphics3DInternalAccess.DrawableRenderState renderState = _Graphics3DInternalAccess.drawableRenderState(figure);
-            prepare3DDepthFrame();
-            if (TRACE_3D_CALLS) {
-                int polygons = handle == null || handle.model() == null ? -1 : handle.model().polygons().length;
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call renderObject3D type=Figure polygons=" + polygons
-                        + " textures=" + (handle == null ? -1 : handle.numTextures())
-                        + " pattern=" + (handle == null ? -1 : handle.patternMask())
-                        + " transform=" + (objectMatrix == null ? "null" : Arrays.toString(objectMatrix)));
-            }
-            threeD.renderUiFigure(delegate, surface.image(), originX, originY, surface.width(), surface.height(),
-                    handle, objectMatrix, renderState.blendMode(), renderState.transparency());
-            return;
-        }
-        if (object instanceof com.nttdocomo.ui.graphics3d.Primitive primitive) {
-            _PrimitiveRenderStateAccess.PrimitiveRenderState renderState = _PrimitiveRenderStateAccess.snapshot(primitive);
-            _Graphics3DInternalAccess.DrawableRenderState drawableState = _Graphics3DInternalAccess.drawableRenderState(primitive);
-            prepare3DDepthFrame();
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call renderObject3D type=Primitive primitiveType="
-                        + primitive.getPrimitiveType()
-                        + " count=" + primitive.size()
-                        + " transform=" + (objectMatrix == null ? "null" : Arrays.toString(objectMatrix)));
-            }
-            threeD.renderUiPrimitive(delegate, surface.image(), originX, originY, surface.width(), surface.height(),
-                    primitive.getPrimitiveType(), primitive.getPrimitiveParam(), primitive.size(),
-                    primitive.getVertexArray(), primitive.getColorArray(), primitive.getTextureCoordArray(), renderState.textureHandle(),
-                    objectMatrix, drawableState.blendMode(), drawableState.transparency(),
-                    renderState.textureWrapEnabled(),
-                    renderState.textureCoordinateTranslateU(),
-                    renderState.textureCoordinateTranslateV(),
-                    renderState.depthTestEnabled(),
-                    renderState.depthWriteEnabled(),
-                    renderState.doubleSided());
-        }
-    }
-
-    private static float[] composeGroupTransform(float[] parentMatrix, com.nttdocomo.ui.graphics3d.Group group) {
-        Transform groupTransform = new Transform();
-        group.getTransform(groupTransform);
-        float[] groupMatrix = matrixOf(groupTransform);
-        return parentMatrix == null ? groupMatrix : Software3DContext.multiply(parentMatrix, groupMatrix);
-    }
-
-    private static float[] matrixOf(Transform transform) {
-        float[] matrix = new float[16];
-        for (int i = 0; i < 16; i++) {
-            matrix[i] = transform.get(i);
-        }
-        return matrix;
     }
 
     /**
@@ -2502,11 +2386,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setViewTrans(com.nttdocomo.opt.ui.j3d.AffineTrans transform) {
         try {
-            float[] matrix = transform == null ? Software3DContext.identity() : _Opt3DInternalAccess.toFloatMatrix(transform);
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setViewTrans matrix=" + Arrays.toString(matrix));
-            }
-            threeD.setOptViewTransform(matrix);
+            opt3D.setViewTrans(transform);
         } catch (RuntimeException e) {
             throw traceFailure("setViewTrans", e);
         }
@@ -2517,7 +2397,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setViewTransArray(com.nttdocomo.opt.ui.j3d.AffineTrans[] transforms) {
-        this.optViewTransforms = transforms == null ? new com.nttdocomo.opt.ui.j3d.AffineTrans[0] : transforms.clone();
+        opt3D.setViewTransArray(transforms);
     }
 
     /**
@@ -2525,7 +2405,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setViewTrans(int index) {
-        setViewTrans(optViewTransforms[index]);
+        opt3D.setViewTrans(index);
     }
 
     /**
@@ -2534,12 +2414,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenCenter(int x, int y) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenCenter x=" + x + " y=" + y);
-            }
-            // opt.ui.j3d screen-space state is defined in absolute canvas coordinates rather
-            // than inheriting Graphics.setOrigin() like the 2D drawing methods do.
-            threeD.setOptScreenCenter(x, y);
+            opt3D.setScreenCenter(x, y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenCenter", e);
         }
@@ -2551,10 +2426,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenScale(int x, int y) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenScale x=" + x + " y=" + y);
-            }
-            threeD.setOptScreenScale(x, y);
+            opt3D.setScreenScale(x, y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenScale", e);
         }
@@ -2566,11 +2438,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setScreenView(int x, int y) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setScreenView width=" + x + " height=" + y);
-            }
-            // DoJa opt `setScreenView()` configures the parallel-projection extent, not a screen-space position.
-            threeD.setOptScreenView(x, y);
+            opt3D.setScreenView(x, y);
         } catch (RuntimeException e) {
             throw traceFailure("setScreenView", e);
         }
@@ -2582,10 +2450,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspective(int near, int far, int width) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspective near=" + near + " far=" + far + " width=" + width);
-            }
-            threeD.setOptPerspective(near, far, width);
+            opt3D.setPerspective(near, far, width);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspective(int,int,int)", e);
         }
@@ -2597,10 +2462,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspective(int near, int far, int width, int height) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setPerspectiveWH near=" + near + " far=" + far + " width=" + width + " height=" + height);
-            }
-            threeD.setOptPerspective(near, far, width, height);
+            opt3D.setPerspective(near, far, width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setPerspective(int,int,int,int)", e);
         }
@@ -2620,16 +2482,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void renderFigure(com.nttdocomo.opt.ui.j3d.Figure figure) {
-        if (figure == null) {
-            return;
-        }
         try {
-            MascotFigure handle = _Opt3DInternalAccess.handle(figure);
-            prepare3DDepthFrame();
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call renderFigure " + describeOptFigure(handle));
-            }
-            threeD.renderOptFigure(delegate, surface.image(), 0, 0, surface.width(), surface.height(), handle);
+            opt3D.renderFigure(figure, renderTarget(), this::prepare3DDepthFrame);
         } catch (RuntimeException e) {
             throw traceFailure("renderFigure", e);
         }
@@ -2655,8 +2509,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void enableSphereMap(boolean enabled) {
-        this.optSphereMapEnabled = enabled;
-        threeD.enableOptSphereMap(enabled);
+        opt3D.enableSphereMap(enabled);
     }
 
     /**
@@ -2664,15 +2517,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setSphereTexture(com.nttdocomo.opt.ui.j3d.Texture texture) {
-        if (texture == null) {
-            throw new NullPointerException("texture");
-        }
-        SoftwareTexture handle = _Opt3DInternalAccess.handle(texture);
-        if (!handle.sphereMap()) {
-            throw new IllegalArgumentException("texture must be an environment-mapping texture");
-        }
-        this.optSphereTexture = handle;
-        threeD.setOptSphereTexture(handle);
+        opt3D.setSphereTexture(texture);
     }
 
     /**
@@ -2680,10 +2525,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void enableLight(boolean enabled) {
-        if (TRACE_3D_CALLS) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call enableLight enabled=" + enabled);
-        }
-        threeD.enableOptLight(enabled);
+        opt3D.enableLight(enabled);
     }
 
     /**
@@ -2691,9 +2533,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setAmbientLight(int color) {
-        if (TRACE_3D_CALLS) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call setAmbientLight value=" + color);
-        }
+        opt3D.setAmbientLight(color);
     }
 
     /**
@@ -2701,12 +2541,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setDirectionLight(com.nttdocomo.opt.ui.j3d.Vector3D direction, int color) {
-        if (TRACE_3D_CALLS) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call setDirectionLight dir=("
-                    + (direction == null ? 0 : direction.x) + ","
-                    + (direction == null ? 0 : direction.y) + ","
-                    + (direction == null ? 0 : direction.z) + ") value=" + color);
-        }
+        opt3D.setDirectionLight(direction, color);
     }
 
     /**
@@ -2714,7 +2549,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void enableSemiTransparent(boolean enabled) {
-        threeD.enableOptSemiTransparent(enabled);
+        opt3D.enableSemiTransparent(enabled);
     }
 
     /**
@@ -2723,11 +2558,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setClipRect3D(int x, int y, int width, int height) {
         try {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, () -> "3D call setClipRect3D x=" + x + " y=" + y + " width=" + width + " height=" + height);
-            }
-            // `setClipRect3D()` is defined in absolute canvas coordinates and ignores Graphics.setOrigin().
-            threeD.setOptClip(x, y, width, height);
+            opt3D.setClipRect3D(x, y, width, height);
         } catch (RuntimeException e) {
             throw traceFailure("setClipRect3D", e);
         }
@@ -2745,8 +2576,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void enableToonShader(boolean enabled) {
-        this.optToonShaderEnabled = enabled;
-        threeD.enableOptToonShader(enabled);
+        opt3D.enableToonShader(enabled);
     }
 
     /**
@@ -2754,13 +2584,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setToonParam(int highlight, int mid, int shadow) {
-        validateToonParameter(highlight, "highlight");
-        validateToonParameter(mid, "mid");
-        validateToonParameter(shadow, "shadow");
-        this.optToonThreshold = highlight;
-        this.optToonMid = mid;
-        this.optToonShadow = shadow;
-        threeD.setOptToonShader(highlight, mid, shadow);
+        opt3D.setToonParam(highlight, mid, shadow);
     }
 
     /**
@@ -2768,11 +2592,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setPrimitiveTextureArray(com.nttdocomo.opt.ui.j3d.Texture texture) {
-        if (TRACE_3D_CALLS) {
-            SoftwareTexture handle = texture == null ? null : _Opt3DInternalAccess.handle(texture);
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call setPrimitiveTextureArray single texture=" + describeTexture(handle));
-        }
-        threeD.setPrimitiveTextures(texture == null ? null : new SoftwareTexture[]{_Opt3DInternalAccess.handle(texture)});
+        opt3D.setPrimitiveTextureArray(texture);
     }
 
     /**
@@ -2780,21 +2600,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setPrimitiveTextureArray(com.nttdocomo.opt.ui.j3d.Texture[] textures) {
-        if (textures == null) {
-            if (TRACE_3D_CALLS) {
-                OpenDoJaLog.debug(Graphics.class, "3D call setPrimitiveTextureArray array=null");
-            }
-            threeD.setPrimitiveTextures(null);
-            return;
-        }
-        SoftwareTexture[] converted = new SoftwareTexture[textures.length];
-        for (int i = 0; i < textures.length; i++) {
-            converted[i] = _Opt3DInternalAccess.handle(textures[i]);
-        }
-        if (TRACE_3D_CALLS) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call setPrimitiveTextureArray array=" + describeTextures(converted));
-        }
-        threeD.setPrimitiveTextures(converted);
+        opt3D.setPrimitiveTextureArray(textures);
     }
 
     /**
@@ -2802,10 +2608,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void setPrimitiveTexture(int index) {
-        if (TRACE_3D_CALLS) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call setPrimitiveTexture index=" + index);
-        }
-        threeD.setPrimitiveTexture(index);
+        opt3D.setPrimitiveTexture(index);
     }
 
     /**
@@ -2813,16 +2616,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int attr) {
-        prepare3DDepthFrame();
-        if (TRACE_3D_CALLS && primitives != null) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call renderPrimitives type=" + primitives.getType()
-                    + " param=" + primitives.getParam()
-                    + " size=" + primitives.size()
-                    + " attr=" + attr
-                    + " textures=" + describeTextures(threeD.primitiveTexturesSnapshot())
-                    + " selectedTexture=" + threeD.primitiveTextureIndex());
-        }
-        threeD.renderOptPrimitives(delegate, surface.image(), 0, 0, surface.width(), surface.height(), primitives, attr);
+        opt3D.renderPrimitives(renderTarget(), primitives, attr, this::prepare3DDepthFrame);
     }
 
     /**
@@ -2830,19 +2624,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void renderPrimitives(com.nttdocomo.opt.ui.j3d.PrimitiveArray primitives, int start, int count, int attr) {
-        prepare3DDepthFrame();
-        if (TRACE_3D_CALLS && primitives != null) {
-            OpenDoJaLog.debug(Graphics.class, () -> "3D call renderPrimitivesRange type=" + primitives.getType()
-                    + " param=" + primitives.getParam()
-                    + " size=" + primitives.size()
-                    + " start=" + start
-                    + " count=" + count
-                    + " attr=" + attr
-                    + " textures=" + describeTextures(threeD.primitiveTexturesSnapshot())
-                    + " selectedTexture=" + threeD.primitiveTextureIndex());
-        }
-        // The three-int DoJa overload renders a slice of the PrimitiveArray.
-        threeD.renderOptPrimitivesRange(delegate, surface.image(), 0, 0, surface.width(), surface.height(), primitives, start, count, attr);
+        opt3D.renderPrimitives(renderTarget(), primitives, start, count, attr, this::prepare3DDepthFrame);
     }
 
     /**
@@ -2850,145 +2632,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     @Override
     public void executeCommandList(int[] commands) {
-        if (commands == null) {
-            throw new NullPointerException("commands");
-        }
-        if (commands.length == 0 || !isSupportedOptCommandListVersion(commands[0])) {
-            throw new IllegalArgumentException("Unsupported command list version: "
-                    + (commands.length == 0 ? "<empty>" : Integer.toString(commands[0])));
-        }
-        for (int i = 1; i < commands.length; ) {
-            int command = commands[i];
-            if (command == com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_END) {
-                return;
-            }
-            i++;
-            switch (command & OPT_COMMAND_PREFIX_MASK) {
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_NOP -> i = skipOptCommandOperands(commands, i, command & OPT_COMMAND_INLINE_VALUE_MASK);
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_FLUSH -> flush();
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_ATTRIBUTE -> applyOptCommandAttributes(command & OPT_COMMAND_INLINE_VALUE_MASK);
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_CLIP_RECT -> {
-                    ensureOptCommandOperands(commands, i, 4, "COMMAND_CLIP_RECT");
-                    int left = commands[i++];
-                    int top = commands[i++];
-                    int right = commands[i++];
-                    int bottom = commands[i++];
-                    setClipRect3D(left, top, java.lang.Math.max(0, right - left), java.lang.Math.max(0, bottom - top));
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_CENTER -> {
-                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_CENTER");
-                    setScreenCenter(commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_TEXTURE -> setPrimitiveTexture(command & OPT_COMMAND_INLINE_VALUE_MASK);
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_VIEW_TRANS -> setViewTrans(command & OPT_COMMAND_INLINE_VALUE_MASK);
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_SCALE -> {
-                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_SCALE");
-                    setScreenScale(commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_SCREEN_VIEW -> {
-                    ensureOptCommandOperands(commands, i, 2, "COMMAND_SCREEN_VIEW");
-                    setScreenView(commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_PERSPECTIVE1 -> {
-                    ensureOptCommandOperands(commands, i, 3, "COMMAND_PERSPECTIVE1");
-                    setPerspective(commands[i++], commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_PERSPECTIVE2 -> {
-                    ensureOptCommandOperands(commands, i, 4, "COMMAND_PERSPECTIVE2");
-                    setPerspective(commands[i++], commands[i++], commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_AMBIENT_LIGHT -> {
-                    ensureOptCommandOperands(commands, i, 1, "COMMAND_AMBIENT_LIGHT");
-                    setAmbientLight(commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_DIRECTION_LIGHT -> {
-                    ensureOptCommandOperands(commands, i, 4, "COMMAND_DIRECTION_LIGHT");
-                    setDirectionLight(new com.nttdocomo.opt.ui.j3d.Vector3D(commands[i++], commands[i++], commands[i++]), commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_TOON_PARAM -> {
-                    ensureOptCommandOperands(commands, i, 3, "COMMAND_TOON_PARAM");
-                    setToonParam(commands[i++], commands[i++], commands[i++]);
-                }
-                case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINTS,
-                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_LINES,
-                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_TRIANGLES,
-                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_QUADS,
-                        com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINT_SPRITES -> i = renderOptCommandPrimitive(commands, i, command);
-                default -> throw new IllegalArgumentException("Unsupported opt command: " + command);
-            }
-        }
-    }
-
-    private static boolean isSupportedOptCommandListVersion(int version) {
-        // Some older handset stacks write the v1 command-list header as a plain literal `1`
-        // instead of the later packed constant `0xfe000001`.
-        return version == com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_LIST_VERSION_1
-                || version == LEGACY_OPT_COMMAND_LIST_VERSION_1;
-    }
-
-    private int skipOptCommandOperands(int[] commands, int index, int count) {
-        ensureOptCommandOperands(commands, index, count, "COMMAND_NOP");
-        return index + count;
-    }
-
-    private void applyOptCommandAttributes(int attributes) {
-        threeD.enableOptLight((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_LIGHT) != 0);
-        threeD.enableOptSemiTransparent((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_SEMI_TRANSPARENT) != 0);
-        enableSphereMap((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_SPHERE_MAP) != 0);
-        enableToonShader((attributes & com.nttdocomo.opt.ui.j3d.Graphics3D.ENV_ATTR_TOON_SHADER) != 0);
-    }
-
-    private int renderOptCommandPrimitive(int[] commands, int index, int command) {
-        int primitiveType = switch (command & OPT_COMMAND_PREFIX_MASK) {
-            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINTS -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINTS;
-            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_LINES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_LINES;
-            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_TRIANGLES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_TRIANGLES;
-            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_QUADS -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_QUADS;
-            case com.nttdocomo.opt.ui.j3d.Graphics3D.COMMAND_RENDER_POINT_SPRITES -> com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES;
-            default -> throw new IllegalArgumentException("Unsupported primitive command: " + command);
-        };
-        int primitiveCount = (command & OPT_COMMAND_RENDER_COUNT_MASK) >>> 16;
-        if (primitiveCount <= 0) {
-            throw new IllegalArgumentException("Invalid primitive count: " + primitiveCount);
-        }
-        PrimitiveArray primitives = new PrimitiveArray(primitiveType, extractOptPrimitiveParam(command, primitiveType), primitiveCount);
-        // Command-list primitive payloads follow the PrimitiveArray storage order:
-        // vertices, normals, texture/point-sprite data, then colors.
-        index = copyOptCommandPayload(commands, index, primitives.getVertexArray(), "vertex");
-        index = copyOptCommandPayload(commands, index, primitives.getNormalArray(), "normal");
-        index = copyOptCommandPayload(commands, index, primitives.getTextureCoordArray(), "texture");
-        index = copyOptCommandPayload(commands, index, primitives.getPointSpriteArray(), "pointSprite");
-        index = copyOptCommandPayload(commands, index, primitives.getColorArray(), "color");
-        renderPrimitives(primitives, command & OPT_COMMAND_ATTR_MASK);
-        return index;
-    }
-
-    private static int extractOptPrimitiveParam(int command, int primitiveType) {
-        int sharedParam = command & (com.nttdocomo.opt.ui.j3d.Graphics3D.NORMAL_PER_FACE
-                | com.nttdocomo.opt.ui.j3d.Graphics3D.NORMAL_PER_VERTEX
-                | com.nttdocomo.opt.ui.j3d.Graphics3D.COLOR_PER_COMMAND
-                | com.nttdocomo.opt.ui.j3d.Graphics3D.COLOR_PER_FACE
-                | com.nttdocomo.opt.ui.j3d.Graphics3D.TEXTURE_COORD_PER_VERTEX);
-        if (primitiveType != com.nttdocomo.opt.ui.j3d.Graphics3D.PRIMITIVE_POINT_SPRITES) {
-            return sharedParam;
-        }
-        return sharedParam | (command & (com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_PIXEL_SIZE
-                | com.nttdocomo.opt.ui.j3d.Graphics3D.POINT_SPRITE_FLAG_NO_PERSPECTIVE));
-    }
-
-    private static int copyOptCommandPayload(int[] commands, int index, int[] target, String label) {
-        if (target == null || target.length == 0) {
-            return index;
-        }
-        ensureOptCommandOperands(commands, index, target.length, label);
-        System.arraycopy(commands, index, target, 0, target.length);
-        return index + target.length;
-    }
-
-    private static void ensureOptCommandOperands(int[] commands, int index, int count, String label) {
-        if (commands.length - index < count) {
-            throw new IllegalArgumentException("Truncated " + label + " payload");
-        }
+        opt3D.executeCommandList(commands, renderTarget(), this::prepare3DDepthFrame, this::flushSurfaceFrame);
     }
 
     private void loadMatrix(int mode, float[] matrix) {
@@ -3005,8 +2649,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES ->
                     ogl.paletteMatrices[ogl.currentPaletteMatrix] = matrix;
             default -> {
-                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
-                    ogl.extensionMatrixState.loadMatrix(mode, matrix);
+                if (ogl.renderer.acceptsExtensionMatrixMode(mode)) {
+                    ogl.renderer.loadExtensionMatrix(mode, matrix);
                 } else {
                     ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
                 }
@@ -3031,8 +2675,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                             ogl.paletteMatrices[ogl.currentPaletteMatrix],
                             matrix);
             default -> {
-                if (ogl.extensionMatrixState.acceptsMatrixMode(ogl.matrixMode)) {
-                    ogl.extensionMatrixState.multiplyMatrix(ogl.matrixMode, matrix);
+                if (ogl.renderer.acceptsExtensionMatrixMode(ogl.matrixMode)) {
+                    ogl.renderer.multiplyExtensionMatrix(ogl.matrixMode, matrix);
                 } else {
                     ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
                 }
@@ -3063,8 +2707,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             case com.nttdocomo.ui.ogl.GraphicsOGL.GL_MATRIX_PALETTE_OES ->
                     ogl.paletteMatrixStacks[ogl.currentPaletteMatrix].push(ogl.paletteMatrices[ogl.currentPaletteMatrix].clone());
             default -> {
-                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
-                    ogl.extensionMatrixState.pushMatrix(mode);
+                if (ogl.renderer.acceptsExtensionMatrixMode(mode)) {
+                    ogl.renderer.pushExtensionMatrix(mode);
                 } else {
                     ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_INVALID_ENUM;
                 }
@@ -3105,8 +2749,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
                 ogl.paletteMatrices[ogl.currentPaletteMatrix] = ogl.paletteMatrixStacks[ogl.currentPaletteMatrix].pop();
             }
             default -> {
-                if (ogl.extensionMatrixState.acceptsMatrixMode(mode)) {
-                    if (!ogl.extensionMatrixState.popMatrix(mode)) {
+                if (ogl.renderer.acceptsExtensionMatrixMode(mode)) {
+                    if (!ogl.renderer.popExtensionMatrix(mode)) {
                         ogl.lastError = com.nttdocomo.ui.ogl.GraphicsOGL.GL_STACK_UNDERFLOW;
                     }
                 } else {
@@ -3447,9 +3091,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             }
         }
         if (useExtensionMatrices) {
-            multiply(clipVectorTemp, ogl.extensionMatrixState.worldMatrix(), x, y, z, 1f);
+            multiply(clipVectorTemp, ogl.renderer.extensionWorldMatrix(), x, y, z, 1f);
             eyeTarget.set(clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
-            multiply(target, ogl.extensionMatrixState.cameraMatrix(), clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
+            multiply(target, ogl.renderer.extensionCameraMatrix(), clipVectorTemp.x, clipVectorTemp.y, clipVectorTemp.z, clipVectorTemp.w);
             return;
         }
         multiply(eyeTarget, ogl.modelViewMatrix, x, y, z, 1f);
@@ -4506,87 +4150,6 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         return Math.max(min, Math.min(max, value));
     }
 
-    private static String describeTextures(SoftwareTexture[] textures) {
-        if (textures == null) {
-            return "null";
-        }
-        String[] description = new String[textures.length];
-        for (int i = 0; i < textures.length; i++) {
-            description[i] = describeTexture(textures[i]);
-        }
-        return Arrays.toString(description);
-    }
-
-    private static String describeTexture(SoftwareTexture texture) {
-        if (texture == null) {
-            return "null";
-        }
-        return texture.width() + "x" + texture.height() + (texture.sphereMap() ? ":sphere" : ":model");
-    }
-
-    private static String describeOptFigure(MascotFigure figure) {
-        if (figure == null) {
-            return "figure=null";
-        }
-        int textureCount = figure.numTextures();
-        int polygonCount = figure.model() == null ? -1 : figure.model().polygons().length;
-        float[] vertices = figure.vertices();
-        float minX = Float.POSITIVE_INFINITY;
-        float minY = Float.POSITIVE_INFINITY;
-        float minZ = Float.POSITIVE_INFINITY;
-        float maxX = Float.NEGATIVE_INFINITY;
-        float maxY = Float.NEGATIVE_INFINITY;
-        float maxZ = Float.NEGATIVE_INFINITY;
-        for (int i = 0; i + 2 < vertices.length; i += 3) {
-            minX = Math.min(minX, vertices[i]);
-            minY = Math.min(minY, vertices[i + 1]);
-            minZ = Math.min(minZ, vertices[i + 2]);
-            maxX = Math.max(maxX, vertices[i]);
-            maxY = Math.max(maxY, vertices[i + 1]);
-            maxZ = Math.max(maxZ, vertices[i + 2]);
-        }
-        return String.format(
-                "polygons=%d textures=%d pattern=%d bounds=[%.1f,%.1f,%.1f]->[%.1f,%.1f,%.1f]",
-                polygonCount,
-                textureCount,
-                figure.patternMask(),
-                minX,
-                minY,
-                minZ,
-                maxX,
-                maxY,
-                maxZ
-        );
-    }
-
-    private void syncUiFogState() {
-        if (uiFog == null) {
-            threeD.setUiFog(null, 0f, 0f, 0f, 0);
-            return;
-        }
-        _Graphics3DInternalAccess.FogState fogState = _Graphics3DInternalAccess.fogState(uiFog);
-        threeD.setUiFog(
-                fogState.mode(),
-                fogState.linearNear(),
-                fogState.linearFar(),
-                fogState.density(),
-                fogState.color()
-        );
-    }
-
-    private void syncOptRendererState() {
-        threeD.enableOptSphereMap(optSphereMapEnabled);
-        threeD.setOptSphereTexture(optSphereTexture);
-        threeD.enableOptToonShader(optToonShaderEnabled);
-        threeD.setOptToonShader(optToonThreshold, optToonMid, optToonShadow);
-    }
-
-    private static void validateToonParameter(int value, String name) {
-        if (value < 0 || value > 255) {
-            throw new IllegalArgumentException(name + " must be in [0,255]: " + value);
-        }
-    }
-
     private static final class RasterVertex {
         float clipX;
         float clipY;
@@ -5118,6 +4681,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private static final class OglState {
+        private final OglRenderer renderer;
         private final Map<Integer, OglTexture> textures = new HashMap<>();
         private final Map<Integer, OglBufferObject> buffers = new HashMap<>();
         private final Set<Integer> enabledCaps = new HashSet<>();
@@ -5204,7 +4768,6 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         private final float[][] paletteMatrices = new float[OGL_MAX_PALETTE_MATRICES][];
         private boolean standardModelViewConfigured;
         private boolean standardProjectionConfigured;
-        private final _OglExtensionMatrixState extensionMatrixState = new _OglExtensionMatrixState();
         private int currentPaletteMatrix;
         private final Deque<float[]> modelViewStack = new ArrayDeque<>();
         private final Deque<float[]> projectionStack = new ArrayDeque<>();
@@ -5217,7 +4780,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         private OglPointer matrixIndexPointer;
         private OglPointer weightPointer;
 
-        private OglState() {
+        private OglState(OglRenderer renderer) {
+            this.renderer = renderer;
             for (int i = 0; i < paletteMatrices.length; i++) {
                 paletteMatrices[i] = identityMatrix();
             }
@@ -5296,7 +4860,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         void beginDrawing() {
             standardModelViewConfigured = false;
             standardProjectionConfigured = false;
-            extensionMatrixState.beginDrawing();
+            renderer.beginDrawing();
         }
 
         void endDrawing() {
@@ -5323,7 +4887,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         }
 
         boolean usesExtensionMatrices() {
-            return extensionMatrixState.usesMatrices(standardModelViewConfigured, standardProjectionConfigured);
+            return renderer.usesExtensionMatrices(standardModelViewConfigured, standardProjectionConfigured);
         }
 
         boolean usesMatrixPalette() {

@@ -4,18 +4,17 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
- * Host-owned compatibility state for OpenGL ES matrix modes used by the
- * Acrodea 3D library. Keeping this outside public DoJa API classes prevents
- * implementation-extension details from becoming part of the general graphics surface.
+ * Compatibility state for the Acrodea OpenGL ES matrix modes used by legacy
+ * mobile 3D libraries.
  */
-public final class _OglExtensionMatrixState {
+public final class AcrodeaOglMatrixExtension {
     private float[] worldMatrix = identityMatrix();
     private float[] cameraMatrix;
     private final Deque<float[]> worldStack = new ArrayDeque<>();
     private final Deque<float[]> cameraStack = new ArrayDeque<>();
 
     public boolean acceptsMatrixMode(int mode) {
-        return _OglExtensionMatrixMode.fromGlMatrixMode(mode) != null;
+        return OglExtensionMatrixMode.fromGlMatrixMode(mode) != null;
     }
 
     public void beginDrawing() {
@@ -82,8 +81,8 @@ public final class _OglExtensionMatrixState {
         }
     }
 
-    private static _OglExtensionMatrixMode requireMode(int glMatrixMode) {
-        _OglExtensionMatrixMode mode = _OglExtensionMatrixMode.fromGlMatrixMode(glMatrixMode);
+    private static OglExtensionMatrixMode requireMode(int glMatrixMode) {
+        OglExtensionMatrixMode mode = OglExtensionMatrixMode.fromGlMatrixMode(glMatrixMode);
         if (mode == null) {
             throw new IllegalArgumentException("Unsupported extension matrix mode: " + glMatrixMode);
         }
