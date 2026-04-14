@@ -1407,7 +1407,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         int destY1 = originY + dy + Math.round((clippedSrcY1 - srcY1) * (dh / (float) sh));
         int destX2 = originX + dx + Math.round((clippedSrcX2 - srcX1) * (dw / (float) sw));
         int destY2 = originY + dy + Math.round((clippedSrcY2 - srcY1) * (dh / (float) sh));
-        Rectangle bounds = rectangleFromPoints(destX1, destY1, destX2, destY2);
+        Rectangle bounds = flippedBounds(rectangleFromPoints(destX1, destY1, destX2, destY2), dx, dy, dw, dh);
         if (drawWithOptRenderMode(bounds, graphics -> {
             AffineTransform savedTransform = graphics.getTransform();
             Composite savedComposite = graphics.getComposite();
@@ -1650,39 +1650,56 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void applyFlipTransform(Graphics2D graphics, int dx, int dy, int dw, int dh) {
+        graphics.transform(flipTransform(dx, dy, dw, dh));
+    }
+
+    private Rectangle flippedBounds(Rectangle bounds, int dx, int dy, int dw, int dh) {
+        if (flipMode == FLIP_NONE) {
+            return bounds;
+        }
+        return flipTransform(dx, dy, dw, dh).createTransformedShape(bounds).getBounds();
+    }
+
+    private AffineTransform flipTransform(int dx, int dy, int dw, int dh) {
+        AffineTransform transform = new AffineTransform();
         switch (flipMode) {
             case FLIP_NONE -> {
             }
             case FLIP_HORIZONTAL -> {
-                graphics.translate(originX + dx + dw, originY + dy);
-                graphics.scale(-1, 1);
-                graphics.translate(-(originX + dx), -(originY + dy));
+                transform.translate(originX + dx + dw, originY + dy);
+                transform.scale(-1, 1);
+                transform.translate(-(originX + dx), -(originY + dy));
             }
             case FLIP_VERTICAL -> {
-                graphics.translate(originX + dx, originY + dy + dh);
-                graphics.scale(1, -1);
-                graphics.translate(-(originX + dx), -(originY + dy));
+                transform.translate(originX + dx, originY + dy + dh);
+                transform.scale(1, -1);
+                transform.translate(-(originX + dx), -(originY + dy));
             }
             case FLIP_ROTATE -> {
-                graphics.rotate(Math.toRadians(180), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+                transform.rotate(Math.toRadians(180), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
             }
             case FLIP_ROTATE_RIGHT -> {
-                graphics.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+                transform.translate(originX + dx + dh, originY + dy);
+                transform.rotate(Math.toRadians(90));
+                transform.translate(-(originX + dx), -(originY + dy));
             }
             case FLIP_ROTATE_LEFT -> {
-                graphics.rotate(Math.toRadians(-90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+                transform.translate(originX + dx, originY + dy + dw);
+                transform.rotate(Math.toRadians(-90));
+                transform.translate(-(originX + dx), -(originY + dy));
             }
             case FLIP_ROTATE_RIGHT_HORIZONTAL -> {
-                graphics.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
-                graphics.scale(-1, 1);
+                transform.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+                transform.scale(-1, 1);
             }
             case FLIP_ROTATE_RIGHT_VERTICAL -> {
-                graphics.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
-                graphics.scale(1, -1);
+                transform.rotate(Math.toRadians(90), originX + dx + dw / 2.0, originY + dy + dh / 2.0);
+                transform.scale(1, -1);
             }
             default -> {
             }
         }
+        return transform;
     }
 
     /**
