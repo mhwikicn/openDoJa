@@ -2,6 +2,7 @@ package opendoja.launcher;
 
 import opendoja.audio.mld.MLDSynth;
 import opendoja.host.DoJaRuntime;
+import opendoja.host.HostScale;
 import opendoja.host.LaunchConfig;
 import opendoja.host.OpenDoJaLog;
 import opendoja.host.OpenGlesRendererMode;
@@ -347,7 +348,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
                 public void actionPerformed(ActionEvent event) {
                     LauncherSettings current = jamLaunchService.loadSettings();
                     jamLaunchService.saveSettings(new LauncherSettings(
-                            selectedScale,
+                            Integer.toString(selectedScale),
                             current.synthId(),
                             current.terminalId(),
                             current.userId(),
@@ -361,10 +362,33 @@ final class OpenDoJaLauncherFrame extends JFrame {
                             current.disableOsDpiScaling()));
                 }
             });
-            item.setSelected(settings.hostScale() == scale);
+            item.setSelected(!HostScale.isFullscreen(settings.hostScale())
+                    && HostScale.fixedScaleOrDefault(settings.hostScale(), DoJaRuntime.MIN_HOST_SCALE) == scale);
             group.add(item);
             hostScaleMenu.add(item);
         }
+        JRadioButtonMenuItem fullscreenItem = new JRadioButtonMenuItem(new AbstractAction(HostScale.label(HostScale.FULLSCREEN_ID)) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                LauncherSettings current = jamLaunchService.loadSettings();
+                jamLaunchService.saveSettings(new LauncherSettings(
+                        HostScale.FULLSCREEN_ID,
+                        current.synthId(),
+                        current.terminalId(),
+                        current.userId(),
+                        current.fontType(),
+                        current.httpOverrideDomain(),
+                        current.fileEncodingOverride(),
+                        current.microeditionPlatformOverride(),
+                        current.openGlesRendererMode(),
+                        current.showOpenGlesFps(),
+                        current.disableBytecodeVerification(),
+                        current.disableOsDpiScaling()));
+            }
+        });
+        fullscreenItem.setSelected(HostScale.isFullscreen(settings.hostScale()));
+        group.add(fullscreenItem);
+        hostScaleMenu.add(fullscreenItem);
         return hostScaleMenu;
     }
 

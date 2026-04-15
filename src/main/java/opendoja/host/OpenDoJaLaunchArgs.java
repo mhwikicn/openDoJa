@@ -121,7 +121,7 @@ public final class OpenDoJaLaunchArgs {
     public static final String GPS_SUPPORTED = "opendoja.gpsSupported";
     /** Whether GPS tracking mode is exposed. */
     public static final String GPS_TRACKING_SUPPORTED = "opendoja.gpsTrackingSupported";
-    /** Integer scale factor for the host viewport. */
+    /** Fixed integer host scale, or {@code fullscreen} for platform fullscreen. */
     public static final String HOST_SCALE = "opendoja.hostScale";
     /** Hostname to force for outbound HTTP requests. */
     public static final String HTTP_OVERRIDE_DOMAIN = "opendoja.httpOverrideDomain";

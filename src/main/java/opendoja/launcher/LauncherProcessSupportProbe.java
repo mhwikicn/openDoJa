@@ -4,8 +4,10 @@ import com.nttdocomo.ui.IApplication;
 import com.nttdocomo.ui.Image;
 import opendoja.audio.mld.MLDSynth;
 import opendoja.host.DoJaEncoding;
+import opendoja.host.HostScale;
 import opendoja.host.LaunchConfig;
 import opendoja.host.OpenDoJaIdentity;
+import opendoja.host.OpenDoJaLaunchArgs;
 import opendoja.host.OpenGlesRendererMode;
 
 import java.net.URI;
@@ -32,6 +34,7 @@ public final class LauncherProcessSupportProbe {
         verifyBuildLaunchCommandAddsExpectedFileEncoding(expectedEncoding);
         verifySpawnedJamSeesExpectedFileEncoding(expectedEncoding);
         verifyLauncherSettingsOverrideEncoding();
+        verifyLauncherSettingsForwardFullscreenHostScale();
         verifySpawnedHardwareLaunchAvoidsNativeAccessWarning();
         System.out.println("Launcher process support probe OK");
     }
@@ -85,7 +88,7 @@ public final class LauncherProcessSupportProbe {
     private static void verifyLauncherSettingsOverrideEncoding() throws Exception {
         String overrideEncoding = StandardCharsets.UTF_16LE.name();
         LauncherSettings settings = new LauncherSettings(
-                1,
+                HostScale.DEFAULT_ID,
                 MLDSynth.DEFAULT.id,
                 OpenDoJaIdentity.defaultTerminalId(),
                 OpenDoJaIdentity.defaultUserId(),
@@ -109,6 +112,29 @@ public final class LauncherProcessSupportProbe {
         check(command.stream().filter(arg -> arg.startsWith("-Dfile.encoding=")).count() == 1,
                 "launch command should contain exactly one file.encoding argument with launcher override: " + command);
         verifySpawnedJamSeesExpectedFileEncoding(settings, overrideEncoding);
+    }
+
+    private static void verifyLauncherSettingsForwardFullscreenHostScale() throws Exception {
+        LauncherSettings settings = new LauncherSettings(
+                HostScale.FULLSCREEN_ID,
+                MLDSynth.DEFAULT.id,
+                OpenDoJaIdentity.defaultTerminalId(),
+                OpenDoJaIdentity.defaultUserId(),
+                LaunchConfig.FontType.BITMAP.id,
+                "",
+                "",
+                "",
+                OpenGlesRendererMode.SOFTWARE,
+                false,
+                false,
+                false);
+        GameLaunchSelection selection = new GameLaunchSelection(
+                java.nio.file.Path.of("probe.jam"),
+                java.nio.file.Path.of("probe.jar"));
+        List<String> command = new LauncherProcessSupport().buildLaunchCommand(selection, settings);
+        String expectedArgument = "-D" + OpenDoJaLaunchArgs.HOST_SCALE + "=" + HostScale.FULLSCREEN_ID;
+        check(command.contains(expectedArgument),
+                "launch command should forward fullscreen host scale as " + expectedArgument + " but was " + command);
     }
 
     private static void verifySpawnedHardwareLaunchAvoidsNativeAccessWarning() throws Exception {
@@ -157,7 +183,7 @@ public final class LauncherProcessSupportProbe {
 
     private static LauncherSettings defaultHardwareSettings() {
         return new LauncherSettings(
-                1,
+                HostScale.DEFAULT_ID,
                 MLDSynth.DEFAULT.id,
                 OpenDoJaIdentity.defaultTerminalId(),
                 OpenDoJaIdentity.defaultUserId(),

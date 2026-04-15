@@ -4,7 +4,7 @@ import java.awt.*;
 
 public record ExternalFrameLayout(
         boolean enabled,
-        int scale,
+        double scale,
         Rectangle screenArea,
         Rectangle drawArea,
         Rectangle topBar,

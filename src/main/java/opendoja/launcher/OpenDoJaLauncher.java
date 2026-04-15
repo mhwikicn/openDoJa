@@ -113,7 +113,7 @@ public final class OpenDoJaLauncher {
     private static String helpText() {
         return usageLine()
                 + "\n\nPass custom runtime properties before -jar, for example:"
-                + "\n  java -D" + OpenDoJaLaunchArgs.HOST_SCALE + "=2 -jar target/opendoja-{version}.jar <game.jam>"
+                + "\n  java -D" + OpenDoJaLaunchArgs.HOST_SCALE + "=fullscreen -jar target/opendoja-{version}.jar <game.jam>"
                 + "\n  java -jar target/opendoja-{version}.jar " + SHOW_OPEN_GLES_FPS_FLAG + " <game.jam>"
                 + "\n  java -jar target/opendoja-{version}.jar " + PHONE_MODEL_FLAG + " P900i <game.jam>"
                 + "\n\n" + OpenDoJaLaunchArgs.formatProperties();

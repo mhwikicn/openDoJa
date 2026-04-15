@@ -32,7 +32,7 @@ final class LauncherPreferencesStore {
     private final Preferences preferences = Preferences.userNodeForPackage(OpenDoJaLauncher.class);
 
     LauncherSettings loadSettings() {
-        int storedHostScale = preferences.getInt(HOST_SCALE_KEY, OpenDoJaLaunchArgs.getInt(OpenDoJaLaunchArgs.HOST_SCALE));
+        String storedHostScale = preferences.get(HOST_SCALE_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HOST_SCALE));
         String storedSynthId = preferences.get(SYNTH_ID_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MLD_SYNTH));
         String storedTerminalId = preferences.get(TERMINAL_ID_KEY, OpenDoJaIdentity.defaultTerminalId());
         String storedUserId = preferences.get(USER_ID_KEY, OpenDoJaIdentity.defaultUserId());
@@ -49,7 +49,7 @@ final class LauncherPreferencesStore {
         boolean storedDisableBytecodeVerification = preferences.getBoolean(DISABLE_BYTECODE_VERIFICATION_KEY, false);
         boolean storedDisableOsDpiScaling = preferences.getBoolean(DISABLE_OS_DPI_SCALING_KEY, false);
         return new LauncherSettings(
-                OpenDoJaLaunchArgs.getInt(OpenDoJaLaunchArgs.HOST_SCALE, storedHostScale),
+                OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HOST_SCALE, storedHostScale),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MLD_SYNTH, storedSynthId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.TERMINAL_ID, storedTerminalId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.USER_ID, storedUserId),
@@ -64,7 +64,7 @@ final class LauncherPreferencesStore {
     }
 
     void saveSettings(LauncherSettings settings) {
-        preferences.putInt(HOST_SCALE_KEY, settings.hostScale());
+        preferences.put(HOST_SCALE_KEY, settings.hostScale());
         preferences.put(SYNTH_ID_KEY, settings.synthId());
         preferences.put(TERMINAL_ID_KEY, settings.terminalId());
         preferences.put(USER_ID_KEY, settings.userId());
