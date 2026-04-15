@@ -15,6 +15,7 @@ import opendoja.host.DoJaEncoding;
 import opendoja.host.OpenDoJaLaunchArgs;
 
 final class LauncherProcessSupport {
+    static final String ENABLE_NATIVE_ACCESS_ARGUMENT = "--enable-native-access=ALL-UNNAMED";
     private static final String JAVA2D_UI_SCALE_ENABLED = "sun.java2d.uiScale.enabled";
 
     Process startInBackground(GameLaunchSelection selection) throws IOException {
@@ -42,6 +43,7 @@ final class LauncherProcessSupport {
     List<String> buildLaunchCommand(GameLaunchSelection selection, LauncherSettings settings) throws IOException {
         List<String> command = new ArrayList<>();
         command.add(Path.of(OpenDoJaLaunchArgs.get("java.home"), "bin", "java").toString());
+        command.add(ENABLE_NATIVE_ACCESS_ARGUMENT);
         if (settings != null && settings.disableBytecodeVerification()) {
             command.add("-Xverify:none");
         }

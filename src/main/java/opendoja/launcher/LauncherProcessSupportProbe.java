@@ -1,7 +1,12 @@
 package opendoja.launcher;
 
 import com.nttdocomo.ui.IApplication;
+import com.nttdocomo.ui.Image;
 import opendoja.host.DoJaEncoding;
+import opendoja.host.OpenDoJaIdentity;
+import opendoja.host.OpenGlesRendererMode;
+import opendoja.host.LaunchConfig;
+import opendoja.audio.mld.MLDSynth;
 
 import java.net.URI;
 import java.nio.charset.Charset;
@@ -27,6 +32,7 @@ public final class LauncherProcessSupportProbe {
         verifyBuildLaunchCommandAddsExpectedFileEncoding(expectedEncoding);
         verifySpawnedJamSeesExpectedFileEncoding(expectedEncoding);
         verifyLauncherSettingsOverrideEncoding();
+        verifySpawnedHardwareLaunchAvoidsNativeAccessWarning();
         System.out.println("Launcher process support probe OK");
     }
 
@@ -35,6 +41,8 @@ public final class LauncherProcessSupportProbe {
                 java.nio.file.Path.of("probe.jam"),
                 java.nio.file.Path.of("probe.jar"));
         List<String> command = new LauncherProcessSupport().buildLaunchCommand(selection);
+        check(command.contains(LauncherProcessSupport.ENABLE_NATIVE_ACCESS_ARGUMENT),
+                "launch command should contain " + LauncherProcessSupport.ENABLE_NATIVE_ACCESS_ARGUMENT + " but was " + command);
         String expectedArgument = "-Dfile.encoding=" + expectedEncoding;
         check(command.contains(expectedArgument),
                 "launch command should contain " + expectedArgument + " but was " + command);
@@ -78,14 +86,14 @@ public final class LauncherProcessSupportProbe {
         String overrideEncoding = StandardCharsets.UTF_16LE.name();
         LauncherSettings settings = new LauncherSettings(
                 1,
-                opendoja.audio.mld.MLDSynth.DEFAULT.id,
-                opendoja.host.OpenDoJaIdentity.defaultTerminalId(),
-                opendoja.host.OpenDoJaIdentity.defaultUserId(),
-                opendoja.host.LaunchConfig.FontType.BITMAP.id,
+                MLDSynth.DEFAULT.id,
+                OpenDoJaIdentity.defaultTerminalId(),
+                OpenDoJaIdentity.defaultUserId(),
+                LaunchConfig.FontType.BITMAP.id,
                 "",
                 overrideEncoding,
                 "",
-                opendoja.host.OpenGlesRendererMode.SOFTWARE,
+                OpenGlesRendererMode.SOFTWARE,
                 false,
                 false,
                 false);
@@ -93,12 +101,41 @@ public final class LauncherProcessSupportProbe {
                 java.nio.file.Path.of("probe.jam"),
                 java.nio.file.Path.of("probe.jar"));
         List<String> command = new LauncherProcessSupport().buildLaunchCommand(selection, settings);
+        check(command.contains(LauncherProcessSupport.ENABLE_NATIVE_ACCESS_ARGUMENT),
+                "launch command should contain " + LauncherProcessSupport.ENABLE_NATIVE_ACCESS_ARGUMENT + " with launcher override but was " + command);
         String expectedArgument = "-Dfile.encoding=" + overrideEncoding;
         check(command.contains(expectedArgument),
                 "launch command should contain explicit launcher override " + expectedArgument + " but was " + command);
         check(command.stream().filter(arg -> arg.startsWith("-Dfile.encoding=")).count() == 1,
                 "launch command should contain exactly one file.encoding argument with launcher override: " + command);
         verifySpawnedJamSeesExpectedFileEncoding(settings, overrideEncoding);
+    }
+
+    private static void verifySpawnedHardwareLaunchAvoidsNativeAccessWarning() throws Exception {
+        Path root = Files.createTempDirectory("launcher-native-access");
+        GameLaunchSelection selection = new GameLaunchSelection(
+                writeNativeAccessJam(root.resolve("NativeAccessProbe.jam")),
+                currentArtifactPath());
+
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                new LauncherProcessSupport().buildLaunchCommand(selection, defaultHardwareSettings()));
+        processBuilder.redirectErrorStream(true);
+        processBuilder.directory(root.toFile());
+        Process process = processBuilder.start();
+        if (!process.waitFor(20, TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new IllegalStateException("spawned native-access probe timed out");
+        }
+        String output;
+        try (var input = process.getInputStream()) {
+            output = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        check(process.exitValue() == 0,
+                "spawned native-access probe should exit cleanly but output was:\n" + output);
+        check(output.contains("Native access probe app OK"),
+                "spawned native-access probe should reach the hardware initialization path but output was:\n" + output);
+        check(!output.contains("A restricted method in java.lang.System has been called"),
+                "spawned native-access probe should not emit the native-access warning but output was:\n" + output);
     }
 
     private static Path writeJam(Path jam, Path output) throws Exception {
@@ -108,6 +145,30 @@ public final class LauncherProcessSupportProbe {
                         + OUTPUT_PARAMETER + "=" + output.toUri() + '\n',
                 StandardCharsets.ISO_8859_1);
         return jam;
+    }
+
+    private static Path writeNativeAccessJam(Path jam) throws Exception {
+        Files.writeString(jam,
+                "AppClass=" + NativeAccessProbeApp.class.getName() + '\n'
+                        + "AppName=LauncherNativeAccessProbe\n",
+                StandardCharsets.ISO_8859_1);
+        return jam;
+    }
+
+    private static LauncherSettings defaultHardwareSettings() {
+        return new LauncherSettings(
+                1,
+                MLDSynth.DEFAULT.id,
+                OpenDoJaIdentity.defaultTerminalId(),
+                OpenDoJaIdentity.defaultUserId(),
+                LaunchConfig.FontType.BITMAP.id,
+                "",
+                "",
+                "",
+                OpenGlesRendererMode.HARDWARE,
+                false,
+                false,
+                false);
     }
 
     private static Path currentArtifactPath() throws Exception {
@@ -137,6 +198,15 @@ public final class LauncherProcessSupportProbe {
             } catch (Exception e) {
                 throw new IllegalStateException("Failed to record child encoding state", e);
             }
+            terminate();
+        }
+    }
+
+    public static final class NativeAccessProbeApp extends IApplication {
+        @Override
+        public void start() {
+            Image.createImage(4, 4).getGraphics();
+            System.out.println("Native access probe app OK");
             terminate();
         }
     }
