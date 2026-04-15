@@ -1575,10 +1575,10 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             return;
         }
         if (OpenDoJaLaunchArgs.openGlesRendererMode() == OpenGlesRendererMode.HARDWARE) {
-            // Immediate outside-lock presents race the buffered hardware frame
-            // and are what turn the explosion shake into a black flash. Keep
-            // the software mutation on the backing surface, but let the next
-            // normal unlock/present boundary publish it.
+            // Immediate outside-lock presents can race the buffered hardware
+            // frame and expose partially updated output. Keep the software
+            // mutation on the backing surface, but let the next normal
+            // unlock/present boundary publish it.
             Rectangle overlayBounds = bounds == null ? null : intersectSurfaceBounds(bounds);
             oglRenderer.onPresentedSoftwareOverlay(overlayBounds);
             traceOpenGlesSync("deferred software present outside lock"
