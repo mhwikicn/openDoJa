@@ -19,6 +19,7 @@ public class PalettedImage extends Image {
     private int height;
     private byte[] pixels;
     private Palette palette;
+    private int alpha = 255;
     private int transparentIndex = -1;
     private int appliedTransparentIndex = -1;
     private boolean transparentEnabled;
@@ -206,6 +207,21 @@ public class PalettedImage extends Image {
         return transparentIndex < 0 ? 0 : transparentIndex;
     }
 
+    @Override
+    public void setAlpha(int alpha) {
+        ensureActive();
+        if (alpha < 0 || alpha > 255) {
+            throw new IllegalArgumentException("alpha out of range: " + alpha);
+        }
+        this.alpha = alpha;
+    }
+
+    @Override
+    public int getAlpha() {
+        ensureActive();
+        return alpha;
+    }
+
     /**
      * Paletted images use transparent indices rather than a transparent RGB
      * color value.
@@ -238,6 +254,7 @@ public class PalettedImage extends Image {
     public void dispose() {
         pixels = null;
         palette = null;
+        alpha = 255;
         appliedTransparentIndex = -1;
     }
 
@@ -289,6 +306,7 @@ public class PalettedImage extends Image {
         this.height = updated.height;
         this.pixels = updated.pixels;
         this.palette = updated.palette;
+        this.alpha = updated.alpha;
         this.transparentIndex = updated.transparentIndex;
         this.appliedTransparentIndex = updated.appliedTransparentIndex;
         this.transparentEnabled = updated.transparentEnabled;
