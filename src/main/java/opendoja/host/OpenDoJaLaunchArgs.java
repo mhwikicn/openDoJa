@@ -245,6 +245,7 @@ public final class OpenDoJaLaunchArgs {
     /** Java text antialias hint name. */
     public static final String TEXT_ANTIALIAS = "opendoja.textAntialias";
     /** Logs audio failures before rethrowing. */
+    public static final String TRACE_AUDIO_FAILURES = "opendoja.traceAudioFailures";
     /** Logs high-level input and runtime events. */
     public static final String TRACE_EVENTS = "opendoja.traceEvents";
     /** Logs API failure details before rethrowing. */
@@ -365,6 +366,7 @@ public final class OpenDoJaLaunchArgs {
             SUB_DISPLAY_HEIGHT,
             SUB_DISPLAY_WIDTH,
             TEXT_ANTIALIAS,
+            TRACE_AUDIO_FAILURES,
             TRACE_EVENTS,
             TRACE_FAILURES,
             UI_FIGURE_VERTEX_SCALE,
@@ -594,6 +596,7 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(SUB_DISPLAY_HEIGHT, () -> "0");
         defaults.put(SUB_DISPLAY_WIDTH, () -> "0");
         defaults.put(TEXT_ANTIALIAS, () -> "gasp");
+        defaults.put(TRACE_AUDIO_FAILURES, () -> "false");
         defaults.put(TRACE_EVENTS, () -> "false");
         defaults.put(TRACE_FAILURES, () -> "false");
         defaults.put(UI_FIGURE_VERTEX_SCALE, () -> "0.015625");
