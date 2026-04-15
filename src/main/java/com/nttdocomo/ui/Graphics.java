@@ -1505,6 +1505,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         }
         Rectangle visibleBounds = bounds.intersection(new Rectangle(0, 0, surface.width(), surface.height()));
         if (shouldImmediatelyPresentOutsideLockImage(image, visibleBounds)) {
+            oglRenderer.onSoftwareSurfaceMutation();
             traceOpenGlesSync("immediate software image present outside lock");
             surface.flush(copyImage(surface.image()), false);
             return;
@@ -1653,6 +1654,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         prepareSoftwareSurfaceMutation();
         blendOptRenderLayer(layer, targetBounds.x, targetBounds.y);
         if (shouldImmediatelyPresentOptLayer(targetBounds)) {
+            oglRenderer.onSoftwareSurfaceMutation();
             oglRenderer.flushHardwarePresentation();
             traceOpenGlesSync("immediate opt-layer present outside lock");
             surface.flush(copyImage(surface.image()), false);

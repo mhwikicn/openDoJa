@@ -2691,9 +2691,7 @@ private final class HardwareBackend {
             Rectangle clip = host.delegate().getClipBounds();
             outsideLockOverlayBounds = clip == null ? surfaceBounds : clip.intersection(surfaceBounds);
         }
-        if (lastHardwareSnapshot == null) {
-            surfaceDirty = true;
-        }
+        surfaceDirty = true;
     }
 
     void onHostDelegateRecreated() {
@@ -3055,6 +3053,12 @@ private final class HardwareBackend {
         gl.glTexCoord2f(1f, 1f);
         gl.glVertex2f(1f, 1f);
         gl.glEnd();
+        clearOutsideLockOverlay();
+    }
+
+    private void clearOutsideLockOverlay() {
+        outsideLockOverlaySnapshot = null;
+        outsideLockOverlayBounds = null;
     }
 
     private void applyClipState(GL2 gl) {
