@@ -907,6 +907,10 @@ public final class DoJaRuntime {
         return HostScale.normalizeId(scale);
     }
 
+    static boolean isWindowResizableForHostScale(String scale) {
+        return HostScale.isFullscreen(normalizeHostScale(scale));
+    }
+
     private static boolean resolveExternalFrameEnabled(LaunchConfig config) {
         return opendoja.host.OpenDoJaLaunchArgs.getBoolean(
                 opendoja.host.OpenDoJaLaunchArgs.EXTERNAL_FRAME,
@@ -917,6 +921,7 @@ public final class DoJaRuntime {
         if (frameWindow == null) {
             return;
         }
+        applyHostWindowResizePolicy(frameWindow);
         Dimension preferred = hostPreferredSize();
         hostPanel.setSize(preferred);
         if (isFullscreenHostScale()) {
@@ -1006,6 +1011,7 @@ public final class DoJaRuntime {
             previousDevice.setFullScreenWindow(null);
         }
         fullScreenDevice = null;
+        window.setResizable(false);
     }
 
     private void rebuildHostWindowForCurrentMode() {
@@ -1139,8 +1145,15 @@ public final class DoJaRuntime {
         window.addWindowListener(hostWindowLifecycleListener);
         window.addWindowFocusListener(hostWindowFocusListener);
         window.add(hostPanel);
-        window.setResizable(!fullscreen);
+        window.setResizable(fullscreen);
         return window;
+    }
+
+    private void applyHostWindowResizePolicy(JFrame window) {
+        if (window == null) {
+            return;
+        }
+        window.setResizable(isWindowResizableForHostScale(hostScaleSetting));
     }
 
     private void showHostWindow(JFrame window, boolean positionWindowed) {

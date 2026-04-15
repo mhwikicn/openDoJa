@@ -16,6 +16,10 @@ public final class HostScaleProbe {
                 "fullscreen should normalize to fullscreen");
         check("Fullscreen".equals(HostScale.label(HostScale.FULLSCREEN_ID)),
                 "fullscreen label should be concise");
+        check(!DoJaRuntime.isWindowResizableForHostScale("1"),
+                "fixed host scale should keep the host window non-resizable");
+        check(DoJaRuntime.isWindowResizableForHostScale(HostScale.FULLSCREEN_ID),
+                "fullscreen host scale should allow the host window to become resizable");
 
         ExternalFrameRenderer framedRenderer = new ExternalFrameRenderer(true,
                 LaunchConfig.DEFAULT_STATUS_BAR_ICON_DEVICE,
