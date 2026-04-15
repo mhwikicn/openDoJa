@@ -12,6 +12,8 @@ import opendoja.g3d.DojaGraphics3DRenderer;
 import opendoja.g3d.OptJ3DRenderer;
 import opendoja.host.DoJaRuntime;
 import opendoja.host.OpenDoJaLog;
+import opendoja.host.OpenDoJaLaunchArgs;
+import opendoja.host.OpenGlesRendererMode;
 import opendoja.host.ogl.AcrodeaOglRenderer;
 import opendoja.host.ogl.OglRenderer;
 
@@ -29,9 +31,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -40,6 +40,7 @@ import java.util.function.Consumer;
 public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.nttdocomo.opt.ui.j3d.Graphics3D, com.nttdocomo.ui.ogl.GraphicsOGL {
     private static final boolean TRACE_FAILURES = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.TRACE_FAILURES);
     private static final boolean TRACE_3D_CALLS = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.DEBUG3D_CALLS);
+    private static final boolean TRACE_OPEN_GLES_SYNC = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.TRACE_OPEN_GLES_SYNC);
     private static final double DOJAAFFINE_FIXED_POINT_SCALE = 4096.0;
     private static final int OPT_RENDER_OP_REPL = 0;
     private static final int OPT_RENDER_OP_ADD = 1;
@@ -201,6 +202,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      * Clears rect.
      */
     public void clearRect(int x, int y, int width, int height) {
+        prepareSoftwareSurfaceMutation();
         Color old = delegate.getColor();
         delegate.setColor(new Color(surface.backgroundColor(), true));
         delegate.fillRect(originX + x, originY + y, width, height);
@@ -263,8 +265,18 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         }
 
         @Override
+        public void markOpenGlesActivity() {
+            surface.markOpenGlesActivity();
+        }
+
+        @Override
         public void flushSurfacePresentation() {
             Graphics.this.flushSurfacePresentation();
+        }
+
+        @Override
+        public void onSoftwareSurfaceMutation() {
+            oglRenderer.onSoftwareSurfaceMutation();
         }
     }
 
@@ -753,7 +765,14 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      * Disposes this object and releases its resources.
      */
     public void dispose() {
+        oglRenderer.close();
         delegate.dispose();
+    }
+
+    void syncOffscreenSurfaceForReadback() {
+        flushPending3DPasses();
+        pendingOptRenderedContent = false;
+        oglRenderer.flushHardwarePresentation();
     }
 
     /**
@@ -773,6 +792,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         } else {
             delegate.setClip(clip);
         }
+        oglRenderer.onHostDelegateRecreated();
     }
 
     /**
@@ -842,6 +862,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.drawLine(originX + x1, originY + y1, originX + x2, originY + y2))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.drawLine(originX + x1, originY + y1, originX + x2, originY + y2);
         flushSurfacePresentation();
     }
@@ -878,8 +899,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.drawPolyline(drawX, drawY, n))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.drawPolyline(drawX, drawY, n);
-        flushSurfacePresentation();
+        flushSurfacePresentation(bounds);
     }
 
     /**
@@ -890,6 +912,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.drawRect(originX + x, originY + y, width, height))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.drawRect(originX + x, originY + y, width, height);
         flushSurfacePresentation();
     }
@@ -909,6 +932,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> font.drawString(graphics, text, originX + x, originY + y, color))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         font.drawString(delegate, text, originX + x, originY + y, color);
         flushSurfacePresentation();
     }
@@ -933,6 +957,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             drawX[i] = originX + xs[i];
             drawY[i] = originY + ys[i];
         }
+        prepareSoftwareSurfaceMutation();
         delegate.fillPolygon(drawX, drawY, n);
         flushSurfacePresentation();
     }
@@ -945,6 +970,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.fillRect(originX + x, originY + y, width, height))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.fillRect(originX + x, originY + y, width, height);
         flushSurfacePresentation();
     }
@@ -1062,6 +1088,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             flushPending3DPasses();
         }
         if (flush) {
+            traceOpenGlesSync("unlock present flush=true outermost=" + outermostUnlock);
+            oglRenderer.flushHardwarePresentation();
             presentedFrame = copyImage(surface.image());
         } else if (outermostUnlock && surface.hasRepaintHook()) {
             // Some games draw directly to Canvas.getGraphics() and finish the frame with unlock(false)
@@ -1069,6 +1097,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             // outermost lock scope, while offscreen Image surfaces must remain offscreen.
             // These loops already own their pacing, so present without the sync-unlock delay that
             // explicit unlock(true)/flush() paths use.
+            traceOpenGlesSync("unlock present flush=false outermost=true");
+            oglRenderer.flushHardwarePresentation();
             presentedFrame = copyImage(surface.image());
             pacedPresentation = false;
         }
@@ -1130,6 +1160,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.drawArc(originX + x, originY + y, width, height, startAngle, arcAngle))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.drawArc(originX + x, originY + y, width, height, startAngle, arcAngle);
         flushSurfacePresentation();
     }
@@ -1142,6 +1173,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         if (drawWithOptRenderMode(bounds, graphics -> graphics.fillArc(originX + x, originY + y, width, height, startAngle, arcAngle))) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         delegate.fillArc(originX + x, originY + y, width, height, startAngle, arcAngle);
         flushSurfacePresentation();
     }
@@ -1194,6 +1226,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      * Sets r G B Pixel.
      */
     public void setRGBPixel(int x, int y, int color) {
+        prepareSoftwareSurfaceMutation();
         surface.image().setRGB(originX + x, originY + y, toOpaqueRgb(color));
         flushSurfacePresentation();
     }
@@ -1210,6 +1243,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      */
     public void setRGBPixels(int x, int y, int width, int height, int[] pixels, int offset) {
         int length = checkedRgbPixelLength(pixels, offset, width, height);
+        prepareSoftwareSurfaceMutation();
         if (hasNonOpaqueRgbPixels(pixels, offset, length)) {
             surface.image().setRGB(originX + x, originY + y, width, height,
                     opaqueRgbPixels(pixels, offset, length), 0, width);
@@ -1324,6 +1358,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         })) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         try {
             applyFlipTransform(localBounds.x, localBounds.y, localBounds.width, localBounds.height);
             AffineTransform drawTransform = new AffineTransform(localTransform);
@@ -1456,6 +1491,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         })) {
             return;
         }
+        prepareSoftwareSurfaceMutation();
         AffineTransform oldTransform = delegate.getTransform();
         try {
             applyFlipTransform(dx, dy, dw, dh);
@@ -1467,7 +1503,50 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         } finally {
             delegate.setTransform(oldTransform);
         }
-        flushSurfacePresentation();
+        Rectangle visibleBounds = bounds.intersection(new Rectangle(0, 0, surface.width(), surface.height()));
+        if (shouldImmediatelyPresentOutsideLockImage(image, visibleBounds)) {
+            traceOpenGlesSync("immediate software image present outside lock");
+            surface.flush(copyImage(surface.image()), false);
+            return;
+        }
+        flushSurfacePresentation(visibleBounds);
+    }
+
+    private boolean shouldImmediatelyPresentOutsideLockImage(Image image, Rectangle visibleBounds) {
+        OpenGlesRendererMode mode = OpenDoJaLaunchArgs.openGlesRendererMode();
+        if (mode != OpenGlesRendererMode.HARDWARE) {
+            traceOutsideLockPresentDecision("image", false, "mode=" + mode, null, visibleBounds);
+            return false;
+        }
+        if (!(image instanceof DesktopImage desktopImage)) {
+            traceOutsideLockPresentDecision("image", false, "non-desktop-image", null, visibleBounds);
+            return false;
+        }
+        if (desktopImage.width() != surface.width() || desktopImage.height() != surface.height()) {
+            traceOutsideLockPresentDecision("image", false,
+                    "size=" + desktopImage.width() + "x" + desktopImage.height()
+                            + " surface=" + surface.width() + "x" + surface.height(),
+                    desktopImage, visibleBounds);
+            return false;
+        }
+        if (visibleBounds.isEmpty()) {
+            traceOutsideLockPresentDecision("image", false, "empty-bounds", desktopImage, visibleBounds);
+            return false;
+        }
+        if (visibleBounds.width < surface.width() - 32 || visibleBounds.height < surface.height() - 32) {
+            traceOutsideLockPresentDecision("image", false,
+                    "bounds=" + visibleBounds.width + "x" + visibleBounds.height,
+                    desktopImage, visibleBounds);
+            return false;
+        }
+        DoJaRuntime runtime = DoJaRuntime.current();
+        boolean hasRepaintHook = surface.hasRepaintHook();
+        boolean insideLock = runtime != null && runtime.surfaceLock().isHeldByCurrentThread();
+        boolean immediate = hasRepaintHook && !insideLock;
+        traceOutsideLockPresentDecision("image", immediate,
+                "hook=" + hasRepaintHook + " insideLock=" + insideLock,
+                desktopImage, visibleBounds);
+        return immediate;
     }
 
     private BufferedImage copyImage(BufferedImage image) {
@@ -1485,14 +1564,44 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     }
 
     private void flushSurfacePresentation() {
-        if (!surface.hasRepaintHook()) {
-            return;
-        }
+        flushSurfacePresentation(null);
+    }
+
+    private void flushSurfacePresentation(Rectangle bounds) {
         DoJaRuntime runtime = DoJaRuntime.current();
-        if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
+        boolean insideLock = runtime != null && runtime.surfaceLock().isHeldByCurrentThread();
+        if (insideLock || !surface.hasRepaintHook()) {
+            oglRenderer.onSoftwareSurfaceMutation();
             return;
         }
+        if (OpenDoJaLaunchArgs.openGlesRendererMode() == OpenGlesRendererMode.HARDWARE) {
+            // Immediate outside-lock presents race the buffered hardware frame
+            // and are what turn the explosion shake into a black flash. Keep
+            // the software mutation on the backing surface, but let the next
+            // normal unlock/present boundary publish it.
+            Rectangle overlayBounds = bounds == null ? null : intersectSurfaceBounds(bounds);
+            oglRenderer.onPresentedSoftwareOverlay(overlayBounds);
+            traceOpenGlesSync("deferred software present outside lock"
+                    + (overlayBounds == null
+                    ? ""
+                    : " bounds=" + overlayBounds.x + "," + overlayBounds.y + " "
+                    + overlayBounds.width + "x" + overlayBounds.height));
+            return;
+        }
+        oglRenderer.onPresentedSoftwareOverlay(bounds);
+        traceOpenGlesSync("immediate software present outside lock");
         surface.flush(copyImage(surface.image()), false);
+    }
+
+    private void prepareSoftwareSurfaceMutation() {
+        oglRenderer.prepareForSoftwareMutation();
+    }
+
+    private void traceOpenGlesSync(String message) {
+        if (!TRACE_OPEN_GLES_SYNC) {
+            return;
+        }
+        OpenDoJaLog.debug(Graphics.class, message);
     }
 
     protected boolean usesOptRenderMode() {
@@ -1541,8 +1650,15 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         } finally {
             graphics.dispose();
         }
+        prepareSoftwareSurfaceMutation();
         blendOptRenderLayer(layer, targetBounds.x, targetBounds.y);
-        flushSurfacePresentation();
+        if (shouldImmediatelyPresentOptLayer(targetBounds)) {
+            oglRenderer.flushHardwarePresentation();
+            traceOpenGlesSync("immediate opt-layer present outside lock");
+            surface.flush(copyImage(surface.image()), false);
+            return true;
+        }
+        flushSurfacePresentation(targetBounds);
         return true;
     }
 
@@ -1561,6 +1677,50 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             clipped = clipped.intersection(clipBounds);
         }
         return clipped.isEmpty() ? null : clipped;
+    }
+
+    private boolean shouldImmediatelyPresentOptLayer(Rectangle targetBounds) {
+        OpenGlesRendererMode mode = OpenDoJaLaunchArgs.openGlesRendererMode();
+        if (mode != OpenGlesRendererMode.HARDWARE) {
+            traceOutsideLockPresentDecision("opt", false, "mode=" + mode, null, targetBounds);
+            return false;
+        }
+        if (targetBounds == null || targetBounds.isEmpty()) {
+            traceOutsideLockPresentDecision("opt", false, "empty-bounds", null, targetBounds);
+            return false;
+        }
+        if (targetBounds.width < surface.width() - 32 || targetBounds.height < surface.height() - 32) {
+            traceOutsideLockPresentDecision("opt", false,
+                    "bounds=" + targetBounds.width + "x" + targetBounds.height,
+                    null, targetBounds);
+            return false;
+        }
+        DoJaRuntime runtime = DoJaRuntime.current();
+        boolean hasRepaintHook = surface.hasRepaintHook();
+        boolean insideLock = runtime != null && runtime.surfaceLock().isHeldByCurrentThread();
+        boolean immediate = hasRepaintHook && !insideLock;
+        traceOutsideLockPresentDecision("opt", immediate,
+                "hook=" + hasRepaintHook + " insideLock=" + insideLock,
+                null, targetBounds);
+        return immediate;
+    }
+
+    private void traceOutsideLockPresentDecision(String kind, boolean immediate, String reason,
+                                                 DesktopImage image, Rectangle bounds) {
+        if (!TRACE_OPEN_GLES_SYNC) {
+            return;
+        }
+        boolean oglImage = image != null && image.surface().hasOpenGlesActivity();
+        String imageInfo = image == null
+                ? ""
+                : " image=" + image.width() + "x" + image.height() + " alpha=" + image.getAlpha()
+                        + " ogl=" + oglImage;
+        String boundsInfo = bounds == null
+                ? " bounds=<null>"
+                : " bounds=" + bounds.x + "," + bounds.y + " " + bounds.width + "x" + bounds.height;
+        OpenDoJaLog.debug(Graphics.class,
+                "outside-lock " + kind + " present immediate=" + immediate + " reason=" + reason
+                        + imageInfo + boundsInfo);
     }
 
     private void blendOptRenderLayer(BufferedImage layer, int destX, int destY) {
@@ -1653,6 +1813,8 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         // Finish any deferred blended primitive batches before ending the shared depth frame.
         flushPending3DPasses();
         pendingOptRenderedContent = false;
+        oglRenderer.flushHardwarePresentation();
+        oglRenderer.onSoftwareSurfaceMutation();
         DoJaRuntime runtime = DoJaRuntime.current();
         if (runtime != null && runtime.surfaceLock().isHeldByCurrentThread()) {
             // DoJa documents `Graphics3D.flush()` as applying pending 3D results, not as a
