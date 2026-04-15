@@ -77,7 +77,7 @@ final class LauncherProcessSupport {
         if (settings == null) {
             return;
         }
-        appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.HOST_SCALE, Integer.toString(settings.hostScale()));
+        appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.HOST_SCALE, settings.hostScale());
         appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.MLD_SYNTH, settings.synthId());
         appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.TERMINAL_ID, settings.terminalId());
         appendProperty(command, overriddenProperties, OpenDoJaLaunchArgs.USER_ID, settings.userId());

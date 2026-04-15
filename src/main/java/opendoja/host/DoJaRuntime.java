@@ -25,8 +25,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 public final class DoJaRuntime {
-    public static final int MIN_HOST_SCALE = 1;
-    public static final int MAX_HOST_SCALE = 4;
+    public static final int MIN_HOST_SCALE = HostScale.MIN_FIXED_SCALE;
+    public static final int MAX_HOST_SCALE = HostScale.MAX_FIXED_SCALE;
+    private static final double MIN_DYNAMIC_HOST_SCALE = 0.01d;
 
     private static final ThreadLocal<LaunchConfig> PREPARED_LAUNCH = new ThreadLocal<>();
     private static final boolean TRACE_EVENTS = opendoja.host.OpenDoJaLaunchArgs.getBoolean(opendoja.host.OpenDoJaLaunchArgs.TRACE_EVENTS);
@@ -66,10 +67,13 @@ public final class DoJaRuntime {
     private final ExternalFrameRenderer externalFrameRenderer;
     private final OpenGlesFpsOverlay openGlesFpsOverlay;
     private final ScratchpadStorage scratchpadStorage;
+    private final java.awt.event.WindowAdapter hostWindowLifecycleListener;
+    private final java.awt.event.WindowAdapter hostWindowFocusListener;
     private volatile boolean openGlesFpsEnabled;
-    private volatile int hostScale;
+    private volatile String hostScaleSetting;
     private volatile IApplication application;
     private JFrame frameWindow;
+    private GraphicsDevice fullScreenDevice;
     private Frame currentFrame;
     private volatile Canvas presentedCanvas;
     private volatile BufferedImage presentedFrame;
@@ -83,7 +87,7 @@ public final class DoJaRuntime {
 
     private DoJaRuntime(LaunchConfig config) {
         this.config = config;
-        this.hostScale = resolveHostScale(config);
+        this.hostScaleSetting = resolveHostScale(config);
         this.externalFrameRenderer = new ExternalFrameRenderer(
                 resolveExternalFrameEnabled(config),
                 config.statusBarIconDevice(),
@@ -98,6 +102,25 @@ public final class DoJaRuntime {
                 config.scratchpadPackedFile(),
                 config.scratchpadSizes());
         this.hostPanel = new HostPanel(this);
+        this.hostWindowLifecycleListener = new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowClosed(java.awt.event.WindowEvent e) {
+                if (!shutdown.get()) {
+                    shutdown();
+                }
+            }
+        };
+        this.hostWindowFocusListener = new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowGainedFocus(java.awt.event.WindowEvent e) {
+                updateFullScreenTopHint((JFrame) e.getWindow(), true);
+            }
+
+            @Override
+            public void windowLostFocus(java.awt.event.WindowEvent e) {
+                updateFullScreenTopHint((JFrame) e.getWindow(), false);
+            }
+        };
     }
 
     public static void prepareLaunch(LaunchConfig config) {
@@ -215,21 +238,35 @@ public final class DoJaRuntime {
     }
 
     public int hostScale() {
-        return hostScale;
+        return Math.max(MIN_HOST_SCALE, (int) Math.round(hostScaleFactor()));
+    }
+
+    public double hostScaleFactor() {
+        return resolveHostScaleFactor(hostScaleSetting);
+    }
+
+    public String hostScaleSetting() {
+        return hostScaleSetting;
     }
 
     public void setHostScale(int scale) {
-        int normalized = normalizeHostScale(scale);
-        if (hostScale == normalized) {
+        setHostScale(Integer.toString(scale));
+    }
+
+    public void setHostScale(String scale) {
+        String normalized = normalizeHostScale(scale);
+        if (hostScaleSetting.equals(normalized)) {
             return;
         }
-        hostScale = normalized;
+        hostScaleSetting = normalized;
         if (SwingUtilities.isEventDispatchThread()) {
+            applyHostWindowModeIfNeeded();
             hostPanel.refreshPreferredSize();
             repackWindow();
             repaintWindow();
         } else {
             SwingUtilities.invokeLater(() -> {
+                applyHostWindowModeIfNeeded();
                 hostPanel.refreshPreferredSize();
                 repackWindow();
                 repaintWindow();
@@ -276,8 +313,12 @@ public final class DoJaRuntime {
         closeShutdownResources();
         scheduler.shutdownNow();
         renderExecutor.shutdownNow();
-        if (frameWindow != null) {
-            SwingUtilities.invokeLater(() -> frameWindow.dispose());
+        JFrame window = frameWindow;
+        if (window != null) {
+            SwingUtilities.invokeLater(() -> {
+                exitFullScreenWindowIfNeeded();
+                window.dispose();
+            });
         }
         restoreLaunchSystemProperties();
         if (current == this) {
@@ -765,30 +806,18 @@ public final class DoJaRuntime {
             if (!shouldCreateHostWindow(false, shutdown.get())) {
                 return;
             }
-            JFrame window = new JFrame(config.title());
-            window.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-            window.getContentPane().setBackground(Color.BLACK);
-            window.setBackground(Color.BLACK);
-            window.addWindowListener(new java.awt.event.WindowAdapter() {
-                @Override
-                public void windowClosed(java.awt.event.WindowEvent e) {
-                    shutdown();
-                }
-            });
-            window.add(hostPanel);
-            window.setResizable(false);
-            window.pack();
-            // GNOME/OpenJDK can ignore setLocationByPlatform(true) for non-resizable frames,
-            // which leaves the host window near the primary-display origin instead of on the active screen.
-            //window.setLocationByPlatform(true);
-            centerOnCurrentScreen(window);
-
+            JFrame window = buildHostWindow(isFullscreenHostScale());
             frameWindow = window;
+            hostPanel.refreshPreferredSize();
             if (!shouldCreateHostWindow(false, shutdown.get())) {
                 window.dispose();
                 return;
             }
-            window.setVisible(true);
+            showHostWindow(window, true);
+            if (!shouldCreateHostWindow(false, shutdown.get())) {
+                window.dispose();
+                return;
+            }
             hostPanel.requestFocusInWindow();
         });
     }
@@ -797,26 +826,61 @@ public final class DoJaRuntime {
         return !headless && !shutdownRequested;
     }
 
+    private void positionInitialWindow(Window window) {
+        if (isFullscreenHostScale()) {
+            return;
+        }
+        // GNOME/OpenJDK can ignore setLocationByPlatform(true) for non-resizable frames,
+        // which leaves the host window near the primary-display origin instead of on the active screen.
+        //window.setLocationByPlatform(true);
+        centerOnCurrentScreen(window);
+    }
+
     private static void centerOnCurrentScreen(Window window) {
-        PointerInfo pointerInfo = MouseInfo.getPointerInfo();
-        GraphicsConfiguration graphicsConfiguration = pointerInfo != null
-                ? pointerInfo.getDevice().getDefaultConfiguration()
-                : window.getGraphicsConfiguration();
-        if (graphicsConfiguration == null) {
+        Rectangle usableBounds = usableScreenBounds(window);
+        if (usableBounds == null) {
             return;
         }
 
+        Dimension size = window.getSize();
+        int x = usableBounds.x + (usableBounds.width - size.width) / 2;
+        int y = usableBounds.y + (usableBounds.height - size.height) / 2;
+        window.setLocation(x, y);
+    }
+
+    private static Rectangle usableScreenBounds(Window window) {
+        if (GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        GraphicsConfiguration graphicsConfiguration = graphicsConfigurationFor(window);
+        if (graphicsConfiguration == null) {
+            return null;
+        }
         Rectangle bounds = graphicsConfiguration.getBounds();
         Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(graphicsConfiguration);
-        int usableX = bounds.x + insets.left;
-        int usableY = bounds.y + insets.top;
-        int usableWidth = bounds.width - insets.left - insets.right;
-        int usableHeight = bounds.height - insets.top - insets.bottom;
+        Rectangle usable = new Rectangle(
+                bounds.x + insets.left,
+                bounds.y + insets.top,
+                Math.max(1, bounds.width - insets.left - insets.right),
+                Math.max(1, bounds.height - insets.top - insets.bottom));
+        Rectangle maximumWindowBounds = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        if (maximumWindowBounds != null && usable.intersects(maximumWindowBounds)) {
+            usable = usable.intersection(maximumWindowBounds);
+        }
+        return usable;
+    }
 
-        Dimension size = window.getSize();
-        int x = usableX + (usableWidth - size.width) / 2;
-        int y = usableY + (usableHeight - size.height) / 2;
-        window.setLocation(x, y);
+    private static GraphicsConfiguration graphicsConfigurationFor(Window window) {
+        PointerInfo pointerInfo = MouseInfo.getPointerInfo();
+        if (pointerInfo != null) {
+            return pointerInfo.getDevice().getDefaultConfiguration();
+        }
+        if (window != null && window.getGraphicsConfiguration() != null) {
+            return window.getGraphicsConfiguration();
+        }
+        return GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .getDefaultScreenDevice()
+                .getDefaultConfiguration();
     }
 
     private static int keyMask(int keyCode) {
@@ -826,12 +890,16 @@ public final class DoJaRuntime {
         return 1 << keyCode;
     }
 
-    private static int resolveHostScale(LaunchConfig config) {
-        return normalizeHostScale(opendoja.host.OpenDoJaLaunchArgs.getInt(opendoja.host.OpenDoJaLaunchArgs.HOST_SCALE));
+    private static String resolveHostScale(LaunchConfig config) {
+        return normalizeHostScale(opendoja.host.OpenDoJaLaunchArgs.get(opendoja.host.OpenDoJaLaunchArgs.HOST_SCALE));
     }
 
     static int normalizeHostScale(int scale) {
-        return Math.clamp(scale, MIN_HOST_SCALE, MAX_HOST_SCALE);
+        return HostScale.normalizeFixedScale(scale);
+    }
+
+    static String normalizeHostScale(String scale) {
+        return HostScale.normalizeId(scale);
     }
 
     private static boolean resolveExternalFrameEnabled(LaunchConfig config) {
@@ -841,26 +909,272 @@ public final class DoJaRuntime {
     }
 
     private void repackWindow() {
-        if (frameWindow != null) {
-            Dimension preferred = hostPreferredSizeForScale(hostScale);
-            hostPanel.setSize(preferred);
-            if (!frameWindow.isDisplayable()) {
-                frameWindow.pack();
-            } else {
-                java.awt.Insets insets = frameWindow.getInsets();
-                frameWindow.setSize(
-                        preferred.width + insets.left + insets.right,
-                        preferred.height + insets.top + insets.bottom);
-                frameWindow.validate();
+        if (frameWindow == null) {
+            return;
+        }
+        Dimension preferred = hostPreferredSize();
+        hostPanel.setSize(preferred);
+        if (isFullscreenHostScale()) {
+            enterFullScreenWindowIfNeeded();
+            frameWindow.validate();
+            return;
+        }
+        frameWindow.pack();
+        frameWindow.validate();
+    }
+
+    private void applyHostWindowModeIfNeeded() {
+        JFrame window = frameWindow;
+        if (window == null) {
+            return;
+        }
+        boolean fullscreen = isFullscreenHostScale();
+        if (fullscreen && window.isUndecorated() && isFullScreenActive()) {
+            return;
+        }
+        if (!fullscreen && !window.isUndecorated()) {
+            return;
+        }
+        rebuildHostWindowForCurrentMode();
+    }
+
+    private void enterFullScreenWindowIfNeeded() {
+        JFrame window = frameWindow;
+        if (window == null) {
+            return;
+        }
+        GraphicsDevice targetDevice = fullScreenDeviceFor(window);
+        if (targetDevice == null) {
+            return;
+        }
+        if (fullScreenDevice == targetDevice
+                && targetDevice.getFullScreenWindow() == window
+                && window.isUndecorated()) {
+            return;
+        }
+
+        if (fullScreenDevice != null
+                && fullScreenDevice != targetDevice
+                && fullScreenDevice.getFullScreenWindow() == window) {
+            fullScreenDevice.setFullScreenWindow(null);
+        }
+        window.setResizable(true);
+        fullScreenDevice = targetDevice;
+        Dimension preferred = fullScreenHostPanelSize(logicalHostSize());
+        hostPanel.setPreferredSize(preferred);
+        hostPanel.setMinimumSize(preferred);
+        hostPanel.setMaximumSize(preferred);
+        hostPanel.setSize(preferred);
+        Rectangle screenBounds = targetDevice.getDefaultConfiguration().getBounds();
+        if (screenBounds != null) {
+            window.setBounds(screenBounds);
+        }
+        if (!shutdown.get()) {
+            if (!window.isVisible()) {
+                window.setVisible(true);
             }
+            updateFullScreenTopHint(window, true);
+            targetDevice.setFullScreenWindow(window);
+            window.validate();
+            window.toFront();
+            hostPanel.requestFocusInWindow();
+            reassertFullScreenWindow(targetDevice, window);
         }
     }
 
-    private Dimension hostPreferredSizeForScale(int scale) {
+    private void exitFullScreenWindowIfNeeded() {
+        JFrame window = frameWindow;
+        if (window == null) {
+            return;
+        }
+        GraphicsDevice previousDevice = fullScreenDevice;
+        boolean wasFullscreen = previousDevice != null && previousDevice.getFullScreenWindow() == window;
+        boolean needsDecorationChange = window.isUndecorated();
+        if (!wasFullscreen && !needsDecorationChange) {
+            fullScreenDevice = null;
+            return;
+        }
+
+        updateFullScreenTopHint(window, false);
+        if (wasFullscreen) {
+            previousDevice.setFullScreenWindow(null);
+        }
+        fullScreenDevice = null;
+    }
+
+    private void rebuildHostWindowForCurrentMode() {
+        JFrame previousWindow = frameWindow;
+        if (previousWindow == null) {
+            return;
+        }
+        // Linux/Swing fullscreen transitions can leave the native window carrying stale
+        // fullscreen geometry/state. Rebuild the frame so the replacement starts clean.
+        updateFullScreenTopHint(previousWindow, false);
+        exitFullScreenWindowIfNeeded();
+        previousWindow.removeWindowListener(hostWindowLifecycleListener);
+        previousWindow.removeWindowFocusListener(hostWindowFocusListener);
+        if (hostPanel.getParent() != null) {
+            hostPanel.getParent().remove(hostPanel);
+        }
+        previousWindow.setVisible(false);
+        previousWindow.dispose();
+        if (shutdown.get()) {
+            frameWindow = null;
+            return;
+        }
+        JFrame replacement = buildHostWindow(isFullscreenHostScale());
+        frameWindow = replacement;
+        hostPanel.refreshPreferredSize();
+        showHostWindow(replacement, true);
+    }
+
+    private Dimension hostPreferredSize() {
+        if (isFullscreenHostScale()) {
+            return fullScreenHostPanelSize(logicalHostSize());
+        }
+        return scaledHostFrameSize();
+    }
+
+    private Dimension scaledHostFrameSize() {
         return externalFrameRenderer.layoutFor(
                 displayWidth(),
                 displayHeight(),
-                normalizeHostScale(scale)).preferredSize();
+                hostScaleFactor()).preferredSize();
+    }
+
+    private Dimension logicalHostSize() {
+        return externalFrameRenderer.layoutFor(displayWidth(), displayHeight(), 1).preferredSize();
+    }
+
+    private double resolveHostScaleFactor(String scaleSetting) {
+        String normalized = normalizeHostScale(scaleSetting);
+        if (!HostScale.isFullscreen(normalized)) {
+            return HostScale.fixedScaleOrDefault(normalized, MIN_HOST_SCALE);
+        }
+        Dimension logicalSize = logicalHostSize();
+        Dimension availableSize = fullScreenHostPanelSize(logicalSize);
+        return resolveFullscreenHostScale(logicalSize, availableSize);
+    }
+
+    private boolean isFullscreenHostScale() {
+        return HostScale.isFullscreen(hostScaleSetting);
+    }
+
+    private Dimension fullScreenHostPanelSize(Dimension logicalSize) {
+        if (isFullScreenActive() && hostPanel.getWidth() > 0 && hostPanel.getHeight() > 0) {
+            return hostPanel.getSize();
+        }
+        Rectangle bounds = fullScreenScreenBounds();
+        if (bounds == null) {
+            return new Dimension(
+                    Math.max(1, logicalSize.width * MAX_HOST_SCALE),
+                    Math.max(1, logicalSize.height * MAX_HOST_SCALE));
+        }
+        return new Dimension(Math.max(1, bounds.width), Math.max(1, bounds.height));
+    }
+
+    static double resolveFullscreenHostScale(Dimension logicalSize, Dimension availableSize) {
+        if (logicalSize == null || availableSize == null || logicalSize.width <= 0 || logicalSize.height <= 0) {
+            return MIN_DYNAMIC_HOST_SCALE;
+        }
+        double widthScale = availableSize.width / (double) logicalSize.width;
+        double heightScale = availableSize.height / (double) logicalSize.height;
+        double scale = Math.min(widthScale, heightScale);
+        if (!Double.isFinite(scale)) {
+            return MIN_DYNAMIC_HOST_SCALE;
+        }
+        return Math.max(MIN_DYNAMIC_HOST_SCALE, scale);
+    }
+
+    static Point frameOriginForHostScale(String scaleSetting, Dimension contentSize, Dimension frameSize) {
+        if (!HostScale.isFullscreen(scaleSetting) || contentSize == null || frameSize == null) {
+            return new Point(0, 0);
+        }
+        return new Point(
+                Math.max(0, (contentSize.width - frameSize.width) / 2),
+                Math.max(0, (contentSize.height - frameSize.height) / 2));
+    }
+
+    private boolean isFullScreenActive() {
+        JFrame window = frameWindow;
+        GraphicsDevice device = fullScreenDevice;
+        return window != null && device != null && device.getFullScreenWindow() == window;
+    }
+
+    private Rectangle fullScreenScreenBounds() {
+        GraphicsDevice device = fullScreenDevice;
+        if (device == null) {
+            device = fullScreenDeviceFor(frameWindow);
+        }
+        if (device == null || device.getDefaultConfiguration() == null) {
+            return null;
+        }
+        return device.getDefaultConfiguration().getBounds();
+    }
+
+    private static GraphicsDevice fullScreenDeviceFor(Window window) {
+        if (GraphicsEnvironment.isHeadless()) {
+            return null;
+        }
+        GraphicsConfiguration graphicsConfiguration = graphicsConfigurationFor(window);
+        if (graphicsConfiguration == null) {
+            return null;
+        }
+        return graphicsConfiguration.getDevice();
+    }
+
+    private JFrame buildHostWindow(boolean fullscreen) {
+        JFrame window = new JFrame(config.title());
+        window.setUndecorated(fullscreen);
+        window.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        window.getContentPane().setBackground(Color.BLACK);
+        window.setBackground(Color.BLACK);
+        window.setAlwaysOnTop(false);
+        window.addWindowListener(hostWindowLifecycleListener);
+        window.addWindowFocusListener(hostWindowFocusListener);
+        window.add(hostPanel);
+        window.setResizable(!fullscreen);
+        return window;
+    }
+
+    private void showHostWindow(JFrame window, boolean positionWindowed) {
+        if (isFullscreenHostScale()) {
+            enterFullScreenWindowIfNeeded();
+            return;
+        }
+        window.pack();
+        hostPanel.refreshPreferredSize();
+        repackWindow();
+        if (positionWindowed) {
+            positionInitialWindow(window);
+        }
+        if (!shutdown.get()) {
+            window.setVisible(true);
+            hostPanel.requestFocusInWindow();
+        }
+    }
+
+    private void reassertFullScreenWindow(GraphicsDevice targetDevice, JFrame window) {
+        SwingUtilities.invokeLater(() -> {
+            if (shutdown.get() || frameWindow != window || !isFullscreenHostScale()) {
+                return;
+            }
+            updateFullScreenTopHint(window, window.isFocused());
+            targetDevice.setFullScreenWindow(window);
+            window.toFront();
+            hostPanel.requestFocusInWindow();
+        });
+    }
+
+    private void updateFullScreenTopHint(JFrame window, boolean focused) {
+        if (window == null || !window.isAlwaysOnTopSupported()) {
+            return;
+        }
+        boolean shouldBeAlwaysOnTop = isFullscreenHostScale() && focused;
+        if (window.isAlwaysOnTop() == shouldBeAlwaysOnTop) {
+            return;
+        }
+        window.setAlwaysOnTop(shouldBeAlwaysOnTop);
     }
 
 
@@ -1092,17 +1406,26 @@ public final class DoJaRuntime {
                         HostPanel.this.requestFocusInWindow();
                     }
                 });
-                item.setSelected(runtime.hostScale() == scale);
+                item.setSelected(!HostScale.isFullscreen(runtime.hostScaleSetting())
+                        && HostScale.fixedScaleOrDefault(runtime.hostScaleSetting(), MIN_HOST_SCALE) == scale);
                 group.add(item);
                 menu.add(item);
             }
+            JRadioButtonMenuItem fullscreenItem = new JRadioButtonMenuItem(new AbstractAction(HostScale.label(HostScale.FULLSCREEN_ID)) {
+                @Override
+                public void actionPerformed(ActionEvent event) {
+                    runtime.setHostScale(HostScale.FULLSCREEN_ID);
+                    HostPanel.this.requestFocusInWindow();
+                }
+            });
+            fullscreenItem.setSelected(HostScale.isFullscreen(runtime.hostScaleSetting()));
+            group.add(fullscreenItem);
+            menu.add(fullscreenItem);
             return menu;
         }
 
         private void refreshPreferredSize() {
-            ExternalFrameLayout layout = runtime.externalFrameRenderer.layoutFor(
-                    runtime.displayWidth(), runtime.displayHeight(), runtime.hostScale());
-            Dimension preferred = layout.preferredSize();
+            Dimension preferred = runtime.hostPreferredSize();
             setPreferredSize(preferred);
             setMinimumSize(preferred);
             setMaximumSize(preferred);
@@ -1114,10 +1437,16 @@ public final class DoJaRuntime {
         protected void paintComponent(java.awt.Graphics g) {
             super.paintComponent(g);
             Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            runtime.externalFrameRenderer.paint(g2, runtime.currentFrame, runtime.presentedFrame,
-                    runtime.displayWidth(), runtime.displayHeight(), runtime.hostScale());
-            g2.dispose();
+            try {
+                Dimension frameSize = runtime.scaledHostFrameSize();
+                Point origin = frameOriginForHostScale(runtime.hostScaleSetting(), getSize(), frameSize);
+                g2.translate(origin.x, origin.y);
+                g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+                runtime.externalFrameRenderer.paint(g2, runtime.currentFrame, runtime.presentedFrame,
+                        runtime.displayWidth(), runtime.displayHeight(), runtime.hostScaleFactor());
+            } finally {
+                g2.dispose();
+            }
         }
     }
 }

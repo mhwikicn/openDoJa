@@ -21,12 +21,12 @@ public final class ExternalFrameSoftKeyProbe {
     }
 
     public static void main(String[] args) throws Exception {
-        runProbe(176, 208, null, 1, 182, 238, 176, 208,
-                new Rectangle(3, 13, 176, 208), new Rectangle(3, 13, 176, 208));
-        runProbe(240, 320, null, 1, 246, 350, 240, 320,
-                new Rectangle(3, 13, 240, 320), new Rectangle(3, 13, 240, 320));
-        runProbe(432, 240, "2", 2, 876, 540, 864, 480,
-                new Rectangle(3, 13, 432, 240), new Rectangle(3, 13, 432, 240));
+        runProbe(176, 208, null, 1, 180, 246, 176, 208,
+                new Rectangle(2, 18, 176, 208), new Rectangle(2, 18, 176, 208));
+        runProbe(240, 320, null, 1, 244, 358, 240, 320,
+                new Rectangle(2, 18, 240, 320), new Rectangle(2, 18, 240, 320));
+        runProbe(432, 240, "2", 2, 872, 556, 864, 480,
+                new Rectangle(2, 18, 432, 240), new Rectangle(2, 18, 432, 240));
     }
 
     private static void runProbe(int viewportWidth, int viewportHeight,

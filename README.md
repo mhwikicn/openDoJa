@@ -36,7 +36,7 @@ Launch a JAM directly without the launcher UI, with explicit host scale, synth, 
 
 ```bash
 java \
-  -Dopendoja.hostScale=<x> \
+  -Dopendoja.hostScale=<x|fullscreen> \
   -Dopendoja.mldSynth=<fuetrek|ma3> \
   -Dopendoja.userId=<uid> \
   -Dopendoja.terminalId=<tid> \

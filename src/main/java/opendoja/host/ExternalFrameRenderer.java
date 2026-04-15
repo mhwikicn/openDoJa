@@ -51,13 +51,17 @@ public final class ExternalFrameRenderer {
     }
 
     public ExternalFrameLayout layoutFor(int viewportWidth, int viewportHeight, int scale) {
-        int clampedScale = Math.max(1, scale);
+        return layoutFor(viewportWidth, viewportHeight, (double) Math.max(1, scale));
+    }
+
+    public ExternalFrameLayout layoutFor(int viewportWidth, int viewportHeight, double scale) {
+        double clampedScale = Math.max(0.01d, scale);
         if (!enabled) {
             Rectangle screenArea = new Rectangle(0, 0, viewportWidth, viewportHeight);
             Rectangle drawArea = new Rectangle(0, 0, viewportWidth, viewportHeight);
             return new ExternalFrameLayout(false, clampedScale, screenArea, drawArea, new Rectangle(), new Rectangle(),
                     new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(),
-                    new Dimension(viewportWidth * clampedScale, viewportHeight * clampedScale));
+                    scaledDimension(viewportWidth, viewportHeight, clampedScale));
         }
 
         int outerWidth = viewportWidth + SIDE_WIDTH * 2;
@@ -79,10 +83,10 @@ public final class ExternalFrameRenderer {
 
         return new ExternalFrameLayout(true, clampedScale, screenArea, drawArea, topBar, bottomBar,
                 leftConnector, rightConnector, statusArea, softKeyArea,
-                new Dimension(outerWidth * clampedScale, outerHeight * clampedScale));
+                scaledDimension(outerWidth, outerHeight, clampedScale));
     }
 
-    public void paint(Graphics2D graphics, Frame frame, BufferedImage drawImage, int viewportWidth, int viewportHeight, int scale) {
+    public void paint(Graphics2D graphics, Frame frame, BufferedImage drawImage, int viewportWidth, int viewportHeight, double scale) {
         ExternalFrameLayout layout = layoutFor(viewportWidth, viewportHeight, scale);
         Graphics2D g = (Graphics2D) graphics.create();
         try {
@@ -90,7 +94,8 @@ public final class ExternalFrameRenderer {
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_GASP);
             g.setColor(Color.BLACK);
-            g.fillRect(0, 0, layout.preferredSize().width / layout.scale(), layout.preferredSize().height / layout.scale());
+            Dimension logicalSize = logicalSize(layout);
+            g.fillRect(0, 0, logicalSize.width, logicalSize.height);
             if (layout.enabled()) {
                 paintChrome(g, layout, frame);
             }
@@ -99,6 +104,23 @@ public final class ExternalFrameRenderer {
         } finally {
             g.dispose();
         }
+    }
+
+    private static Dimension scaledDimension(int width, int height, double scale) {
+        return new Dimension(scaleDimension(width, scale), scaleDimension(height, scale));
+    }
+
+    private static int scaleDimension(int value, double scale) {
+        return Math.max(1, (int) Math.ceil(value * scale - 0.000001d));
+    }
+
+    private static Dimension logicalSize(ExternalFrameLayout layout) {
+        if (!layout.enabled()) {
+            return new Dimension(layout.screenArea().width, layout.screenArea().height);
+        }
+        int width = layout.topBar().width;
+        int height = layout.bottomBar().y + layout.bottomBar().height;
+        return new Dimension(width, height);
     }
 
     private void paintChrome(Graphics2D g, ExternalFrameLayout layout, Frame frame) {
@@ -245,7 +267,7 @@ public final class ExternalFrameRenderer {
             return statusArea.x + statusArea.width;
         }
         int drawY = statusArea.y + java.lang.Math.max(0, (statusArea.height - scaled.height()) / 2);
-        g.drawImage(scaled.image(), drawX, drawY, scaled.width(), scaled.height(), null);
+        paintScaledStatusIcon(g, scaled, drawX, drawY);
         return drawX + scaled.width();
     }
 
@@ -256,7 +278,21 @@ public final class ExternalFrameRenderer {
         }
         int drawX = java.lang.Math.max(statusArea.x, right - scaled.width());
         int drawY = statusArea.y + java.lang.Math.max(0, (statusArea.height - scaled.height()) / 2);
-        g.drawImage(scaled.image(), drawX, drawY, scaled.width(), scaled.height(), null);
+        paintScaledStatusIcon(g, scaled, drawX, drawY);
+    }
+
+    private void paintScaledStatusIcon(Graphics2D g, ScaledStatusIcon scaled, int x, int y) {
+        Object oldInterpolation = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+        try {
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(scaled.image(), x, y, scaled.width(), scaled.height(), null);
+        } finally {
+            if (oldInterpolation == null) {
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            } else {
+                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, oldInterpolation);
+            }
+        }
     }
 
     private void paintOverlays(Graphics2D g, ExternalFrameLayout layout, Frame frame, BufferedImage drawImage) {
