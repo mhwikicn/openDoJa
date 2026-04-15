@@ -1366,6 +1366,14 @@ public final class DoJaRuntime {
         private void installHostScalePopup() {
             MouseAdapter popupListener = new MouseAdapter() {
                 @Override
+                public void mouseClicked(MouseEvent event) {
+                    if (SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                        runtime.setHostScale(MIN_HOST_SCALE);
+                        HostPanel.this.requestFocusInWindow();
+                    }
+                }
+
+                @Override
                 public void mousePressed(MouseEvent event) {
                     maybeShowPopup(event);
                 }
