@@ -624,18 +624,17 @@ public final class DoJaRuntime {
         if (!(currentFrame instanceof Canvas canvas)) {
             return;
         }
-        Runnable eventTask = () -> {
+        // Some titles keep a synchronized paint loop alive for the lifetime of the canvas and poll
+        // keypad state there instead of reacting to processEvent callbacks immediately. Queue the
+        // callback onto the application/render path so host input never wedges the Swing EDT while
+        // still preserving the callback ordering expected by canvas-driven apps.
+        postApplicationCallback(() -> {
             if (TRACE_EVENTS) {
                 OpenDoJaLog.debug(DoJaRuntime.class, () -> "key event type=" + eventType + " key=" + dojaKey + " canvas=" + canvas.getClass().getName());
             }
             canvas.processEvent(eventType, dojaKey);
             repaintWindow();
-        };
-        if (SwingUtilities.isEventDispatchThread()) {
-            eventTask.run();
-        } else {
-            SwingUtilities.invokeLater(eventTask);
-        }
+        });
     }
 
     public void dispatchHostSoftKey(int softKey, int eventType) {
@@ -643,19 +642,14 @@ public final class DoJaRuntime {
         if (frame == null) {
             return;
         }
-        Runnable eventTask = () -> {
+        postApplicationCallback(() -> {
             if (TRACE_EVENTS) {
                 OpenDoJaLog.debug(DoJaRuntime.class,
                         () -> "soft-key event type=" + eventType + " key=" + softKey + " frame=" + frame.getClass().getName());
             }
             frame.processSoftKeyEvent(eventType, softKey);
             repaintWindow();
-        };
-        if (SwingUtilities.isEventDispatchThread()) {
-            eventTask.run();
-        } else {
-            SwingUtilities.invokeLater(eventTask);
-        }
+        });
     }
 
     public InputStream openResourceStream(String path) throws IOException {
