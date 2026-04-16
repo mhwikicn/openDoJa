@@ -34,7 +34,8 @@ public final class JamLauncher {
         if (appClassName == null || appClassName.isBlank()) {
             throw new IllegalArgumentException("JAM/ADF missing AppClass: " + jamPath);
         }
-        Class<?> rawClass = loadApplicationClass(appClassName.trim());
+        Path gameJarPath = locateGameJarIfPresent(jamPath, properties);
+        Class<?> rawClass = loadApplicationClass(appClassName.trim(), gameJarPath);
         if (!IApplication.class.isAssignableFrom(rawClass)) {
             throw new IllegalArgumentException("AppClass does not extend IApplication: " + appClassName);
         }
@@ -187,12 +188,28 @@ public final class JamLauncher {
         return uri.endsWith("/") ? uri : uri + "/";
     }
 
-    private static Class<?> loadApplicationClass(String className) throws ClassNotFoundException {
+    private static Class<?> loadApplicationClass(String className, Path gameJarPath) throws ClassNotFoundException {
+        if (gameJarPath != null) {
+            ClassLoader parentLoader = Thread.currentThread().getContextClassLoader();
+            if (parentLoader == null) {
+                parentLoader = JamLauncher.class.getClassLoader();
+            }
+            ClassLoader gameLoader = JamGameClassLoaderFactory.create(gameJarPath, parentLoader);
+            return Class.forName(className, false, gameLoader);
+        }
         ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
         if (contextLoader != null) {
             return Class.forName(className, false, contextLoader);
         }
         return Class.forName(className, false, JamLauncher.class.getClassLoader());
+    }
+
+    private static Path locateGameJarIfPresent(Path jamPath, Properties properties) {
+        try {
+            return JamGameJarLocator.locate(jamPath, properties);
+        } catch (IOException ignored) {
+            return null;
+        }
     }
 
     private static String stripExtension(String name) {

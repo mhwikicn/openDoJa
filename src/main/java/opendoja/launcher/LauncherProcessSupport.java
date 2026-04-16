@@ -3,7 +3,6 @@ package opendoja.launcher;
 import opendoja.host.DoJaEncoding;
 import opendoja.host.OpenDoJaLaunchArgs;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -47,7 +46,7 @@ final class LauncherProcessSupport {
         appendLauncherSettings(command, settings, overriddenProperties);
         appendFileEncoding(command, settings);
         command.add("-cp");
-        command.add(resolveLauncherArtifact() + File.pathSeparator + selection.gameJarPath());
+        command.add(resolveLauncherArtifact().toString());
         command.add(OpenDoJaLauncher.class.getName());
         command.add(OpenDoJaLauncher.internalRunJamFlag());
         command.add(selection.jamPath().toString());
