@@ -326,6 +326,14 @@ public final class MediaManager {
                 bufferedImage = reader.read(index);
             } catch (IndexOutOfBoundsException e) {
                 break;
+            } catch (IOException e) {
+                if (frames.isEmpty()) {
+                    throw e;
+                }
+                // Some still-image readers reject a follow-up frame probe when trailing bytes are
+                // present after a valid first frame. Preserve the decoded image instead of
+                // dropping the whole resource.
+                break;
             }
             if (bufferedImage == null) {
                 break;
