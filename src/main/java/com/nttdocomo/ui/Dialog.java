@@ -1,6 +1,7 @@
 package com.nttdocomo.ui;
 
 import com.nttdocomo.lang.UnsupportedOperationException;
+import opendoja.host.DoJaRuntime;
 
 import javax.swing.*;
 
@@ -135,6 +136,10 @@ public final class Dialog extends Frame {
             throw new UIException(UIException.BUSY_RESOURCE, "Dialog is already showing");
         }
         showing = true;
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime != null) {
+            runtime.beginModalDialog();
+        }
         try {
         if (type == DIALOG_YESNO) {
             int result = JOptionPane.showConfirmDialog(null, text, title, JOptionPane.YES_NO_OPTION);
@@ -157,6 +162,9 @@ public final class Dialog extends Frame {
         });
         return BUTTON_OK;
         } finally {
+            if (runtime != null) {
+                runtime.endModalDialog();
+            }
             showing = false;
         }
     }

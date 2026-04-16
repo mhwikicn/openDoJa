@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
@@ -65,7 +66,7 @@ public final class DoJaRuntime {
     private final AtomicBoolean renderQueued = new AtomicBoolean();
     // iDKDoja3.5 uses a bounded ScreenUpdater queue. openDoJa has one render slot,
     // so repaint calls that arrive while it is occupied are coalesced and replayed.
-    private final AtomicReference<Canvas> pendingRepaint = new AtomicReference<>();
+    private final AtomicReference<RepaintRequest> pendingRepaint = new AtomicReference<>();
     private final Object renderMonitor = new Object();
     private final Set<AutoCloseable> shutdownResources = ConcurrentHashMap.newKeySet();
     private final HostPanel hostPanel;
@@ -82,9 +83,12 @@ public final class DoJaRuntime {
     private Frame currentFrame;
     private volatile Canvas presentedCanvas;
     private volatile BufferedImage presentedFrame;
-    private volatile int keypadState;
+    private volatile long keypadStateBits;
     private volatile long selectLatchedUntilNanos;
     private volatile Thread renderThread;
+    private final Set<Integer> enabledKeypadGroups = ConcurrentHashMap.newKeySet();
+    private final AtomicInteger modalDialogDepth = new AtomicInteger();
+    private volatile boolean keypadConfigurationLocked;
     private String previousMicroeditionPlatform;
     private String previousMicroeditionProfiles;
     private boolean restoreMicroeditionPlatform;
@@ -92,6 +96,7 @@ public final class DoJaRuntime {
 
     private DoJaRuntime(LaunchConfig config) {
         this.config = config;
+        this.enabledKeypadGroups.add(0);
         this.hostScaleSetting = resolveHostScale(config);
         this.externalFrameRenderer = new ExternalFrameRenderer(
                 resolveExternalFrameEnabled(config),
@@ -359,6 +364,9 @@ public final class DoJaRuntime {
     }
 
     public void setCurrentFrame(Frame frame) {
+        if (frame != null) {
+            keypadConfigurationLocked = true;
+        }
         this.currentFrame = frame;
         if (frame instanceof Canvas canvas) {
             ensureCanvasSurface(canvas);
@@ -379,14 +387,19 @@ public final class DoJaRuntime {
     }
 
     public void requestRepaint(Canvas canvas) {
-        requestRender(canvas, true);
+        requestRender(new RepaintRequest(canvas, null), true);
+    }
+
+    public void requestRepaint(Canvas canvas, int x, int y, int width, int height) {
+        requestRender(new RepaintRequest(canvas, new Rectangle(x, y, width, height)), true);
     }
 
     public void requestRender(Canvas canvas) {
-        requestRender(canvas, false);
+        requestRender(new RepaintRequest(canvas, null), false);
     }
 
-    private void requestRender(Canvas canvas, boolean repaintRequest) {
+    private void requestRender(RepaintRequest repaint, boolean repaintRequest) {
+        Canvas canvas = repaint.canvas();
         Runnable paintTask = () -> {
             renderThread = Thread.currentThread();
             try {
@@ -398,6 +411,10 @@ public final class DoJaRuntime {
                     ensureCanvasSurface(canvas);
                     Graphics g = runtimeGraphics(canvas);
                     try {
+                        Rectangle dirtyRegion = repaint.dirtyRegion();
+                        if (dirtyRegion != null) {
+                            g.setClip(dirtyRegion.x, dirtyRegion.y, dirtyRegion.width, dirtyRegion.height);
+                        }
                         // Runtime-driven paints must not happen on the EDT: some games keep a
                         // synchronized paint loop on their own thread and call Graphics.lock()
                         // inside that method. A separate render worker keeps window events flowing
@@ -429,7 +446,7 @@ public final class DoJaRuntime {
                 return;
             }
         } else if (repaintRequest) {
-            waitForBackpressure = rememberPendingRepaint(canvas) && shouldWaitForRepaintBackpressure(canvas);
+            waitForBackpressure = rememberPendingRepaint(repaint) && shouldWaitForRepaintBackpressure(canvas);
         }
         if (waitForBackpressure) {
             awaitRenderSlotAvailable();
@@ -503,6 +520,17 @@ public final class DoJaRuntime {
         return config.iAppliType();
     }
 
+    /**
+     * Host-only dialog parent for native desktop UI shims such as IME.
+     */
+    public java.awt.Component dialogParent() {
+        JFrame window = frameWindow;
+        if (window != null && window.isDisplayable()) {
+            return hostPanel;
+        }
+        return null;
+    }
+
     public InputStream openScratchpadInput(int index, long position, long length) throws IOException {
         return scratchpadStorage.openInput(index, position, length);
     }
@@ -512,15 +540,49 @@ public final class DoJaRuntime {
     }
 
     public int keypadState() {
-        int state = keypadState;
-        int selectMask = keyMask(Display.KEY_SELECT);
-        if (MINIMUM_SELECT_PRESS_NANOS <= 0L) {
-            return state;
+        return keypadState(0);
+    }
+
+    public int keypadState(int group) {
+        if (!isKeypadGroupEnabled(group)) {
+            return 0;
         }
-        if (selectLatchedUntilNanos > System.nanoTime()) {
-            return state | selectMask;
+        long state = keypadStateBits;
+        if (group == 0 && MINIMUM_SELECT_PRESS_NANOS > 0L && selectLatchedUntilNanos > System.nanoTime()) {
+            state |= absoluteKeyBit(Display.KEY_SELECT);
         }
-        return state;
+        int shift = group * 32;
+        if (shift < 0 || shift >= Long.SIZE) {
+            return 0;
+        }
+        return (int) ((state >>> shift) & 0xFFFF_FFFFL);
+    }
+
+    public void enableKeypadGroup(int group) {
+        if (group < 0 || keypadConfigurationLocked) {
+            return;
+        }
+        enabledKeypadGroups.add(group);
+    }
+
+    public boolean isKeypadGroupEnabled(int group) {
+        return group >= 0 && enabledKeypadGroups.contains(group);
+    }
+
+    public boolean isKeypadConfigurationLocked() {
+        return keypadConfigurationLocked;
+    }
+
+    public void beginModalDialog() {
+        modalDialogDepth.incrementAndGet();
+    }
+
+    public void endModalDialog() {
+        modalDialogDepth.updateAndGet(currentDepth -> java.lang.Math.max(0, currentDepth - 1));
+    }
+
+    public boolean isDialogShowing() {
+        return modalDialogDepth.get() > 0;
     }
 
     public void dispatchTimerEvent(Canvas canvas, int param) {
@@ -534,10 +596,16 @@ public final class DoJaRuntime {
     }
 
     public void dispatchSyntheticKey(int dojaKey, int eventType) {
-        int mask = keyMask(dojaKey);
+        if (!isKeypadGroupEnabled(keyGroup(dojaKey))) {
+            return;
+        }
+        long mask = absoluteKeyBit(dojaKey);
+        if (mask == 0L) {
+            return;
+        }
         long now = System.nanoTime();
         if (eventType == Display.KEY_PRESSED_EVENT) {
-            keypadState |= mask;
+            keypadStateBits |= mask;
             if (dojaKey == Display.KEY_SELECT && MINIMUM_SELECT_PRESS_NANOS > 0L) {
                 // Some DoJa games derive edge-triggered confirm input from polled keypad-state snapshots
                 // rather than from KEY_PRESSED_EVENT callbacks. If a desktop tap begins and ends between
@@ -545,7 +613,7 @@ public final class DoJaRuntime {
                 selectLatchedUntilNanos = now + MINIMUM_SELECT_PRESS_NANOS;
             }
         } else if (eventType == Display.KEY_RELEASED_EVENT) {
-            keypadState &= ~mask;
+            keypadStateBits &= ~mask;
         }
         if (!(currentFrame instanceof Canvas canvas)) {
             return;
@@ -617,21 +685,21 @@ public final class DoJaRuntime {
         invokeCanvasMethod(canvas, "ensureSurface", new Class<?>[]{int.class, int.class}, displayWidth(), displayHeight());
     }
 
-    private boolean rememberPendingRepaint(Canvas canvas) {
-        if (shutdown.get() || currentFrame != canvas) {
+    private boolean rememberPendingRepaint(RepaintRequest repaint) {
+        if (shutdown.get() || currentFrame != repaint.canvas()) {
             return false;
         }
-        pendingRepaint.set(canvas);
+        pendingRepaint.accumulateAndGet(repaint, RepaintRequest::merge);
         return true;
     }
 
     private void replayPendingRepaint() {
-        Canvas repaint = pendingRepaint.getAndSet(null);
+        RepaintRequest repaint = pendingRepaint.getAndSet(null);
         if (repaint == null) {
             return;
         }
-        if (!shutdown.get() && currentFrame == repaint) {
-            requestRender(repaint);
+        if (!shutdown.get() && currentFrame == repaint.canvas()) {
+            requestRender(repaint, false);
         }
     }
 
@@ -888,11 +956,35 @@ public final class DoJaRuntime {
                 .getDefaultConfiguration();
     }
 
-    private static int keyMask(int keyCode) {
-        if (keyCode < 0 || keyCode > 30) {
-            return 0;
+    private static long absoluteKeyBit(int keyCode) {
+        if (keyCode < 0 || keyCode >= Long.SIZE) {
+            return 0L;
         }
-        return 1 << keyCode;
+        return 1L << keyCode;
+    }
+
+    private static int keyGroup(int keyCode) {
+        return keyCode < 0 ? -1 : (keyCode >> 5);
+    }
+
+    private record RepaintRequest(Canvas canvas, Rectangle dirtyRegion) {
+        private static RepaintRequest merge(RepaintRequest existing, RepaintRequest update) {
+            if (existing == null) {
+                return update;
+            }
+            if (update == null || existing.canvas() != update.canvas()) {
+                return update;
+            }
+            Rectangle mergedRegion = mergeDirtyRegions(existing.dirtyRegion(), update.dirtyRegion());
+            return new RepaintRequest(existing.canvas(), mergedRegion);
+        }
+
+        private static Rectangle mergeDirtyRegions(Rectangle first, Rectangle second) {
+            if (first == null || second == null) {
+                return null;
+            }
+            return first.union(second);
+        }
     }
 
     private static String resolveHostScale(LaunchConfig config) {

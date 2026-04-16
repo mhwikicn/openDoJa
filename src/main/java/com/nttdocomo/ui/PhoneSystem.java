@@ -1,5 +1,6 @@
 package com.nttdocomo.ui;
 
+import com.nttdocomo.lang.IllegalStateException;
 import com.nttdocomo.opt.ui.PhoneSystem2;
 import com.nttdocomo.system.StoreException;
 import opendoja.host.DoJaRuntime;
@@ -292,6 +293,17 @@ public class PhoneSystem {
         if (!isValidAttributeValue(device, attribute)) {
             throw new IllegalArgumentException("Invalid attribute value " + attribute + " for device " + device);
         }
+        if (device == DEV_KEYPAD) {
+            DoJaRuntime runtime = DoJaRuntime.current();
+            if (runtime != null) {
+                if (runtime.isKeypadConfigurationLocked()) {
+                    return;
+                }
+                runtime.enableKeypadGroup(attribute);
+            }
+            ATTRIBUTES.put(device, attribute);
+            return;
+        }
         ATTRIBUTES.put(device, attribute);
     }
 
@@ -471,6 +483,7 @@ public class PhoneSystem {
     private static boolean isControllableAttribute(int device) {
         return device == DEV_BACKLIGHT
                 || device == DEV_VIBRATOR
+                || device == DEV_KEYPAD
                 || isKnownOptionalAttribute(device);
     }
 
@@ -478,6 +491,7 @@ public class PhoneSystem {
         return switch (device) {
             case DEV_BACKLIGHT -> attribute == ATTR_BACKLIGHT_OFF || attribute == ATTR_BACKLIGHT_ON;
             case DEV_VIBRATOR -> attribute == ATTR_VIBRATOR_OFF || attribute == ATTR_VIBRATOR_ON;
+            case DEV_KEYPAD -> attribute >= 0;
             case PhoneSystem2.DEV_MELODY_VOLUME, PhoneSystem2.DEV_SE_VOLUME -> attribute >= 0 && attribute <= 100;
             case PhoneSystem2.DEV_ILLUMINATION -> {
                 int baseColor = attribute & 0x00FFFFFF;

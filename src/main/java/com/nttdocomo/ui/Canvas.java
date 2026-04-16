@@ -1,9 +1,9 @@
 package com.nttdocomo.ui;
 
+import com.nttdocomo.lang.IllegalStateException;
 import opendoja.host.DesktopSurface;
 import opendoja.host.DoJaRuntime;
-
-import javax.swing.*;
+import opendoja.host.HostTextInput;
 
 /**
  * Defines the display surface for the low-level API.
@@ -83,7 +83,16 @@ public abstract class Canvas extends Frame {
      * @param height the region height
      */
     public void repaint(int x, int y, int width, int height) {
-        repaint();
+        if (width < 0 || height < 0) {
+            throw new IllegalArgumentException("width/height");
+        }
+        if (width == 0 || height == 0) {
+            return;
+        }
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime != null) {
+            runtime.requestRepaint(this, x, y, width, height);
+        }
     }
 
     /**
@@ -133,38 +142,55 @@ public abstract class Canvas extends Frame {
      * @return the keypad state bit mask for the group
      */
     public int getKeypadState(int group) {
-        return getKeypadState();
+        if (group < 0) {
+            throw new IllegalArgumentException("group");
+        }
+        DoJaRuntime runtime = DoJaRuntime.current();
+        return runtime == null ? 0 : runtime.keypadState(group);
     }
 
     /**
      * Starts IME on the canvas.
      *
-     * @param title the title text
-     * @param maxChars the maximum number of characters
-     * @param mode the input mode
+     * @param text the initial text passed into IME, or {@code null}
+     * @param displayMode the display mode
+     * @param inputMode the input mode
      */
-    public void imeOn(String title, int maxChars, int mode) {
-        imeOn(title, maxChars, mode, 0);
+    public void imeOn(String text, int displayMode, int inputMode) {
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime == null || Display.getCurrent() != this || runtime.isDialogShowing()) {
+            return;
+        }
+        ensureImeCallableState(runtime);
+        validateDisplayMode(displayMode);
+        validateInputMode(inputMode);
+        HostTextInput.requestIme(this, text, displayMode, inputMode, 0);
     }
 
     /**
      * Starts IME on the canvas with an input-size limit.
      *
-     * @param title the title text
-     * @param maxChars the maximum number of characters
-     * @param mode the input mode
+     * @param text the initial text passed into IME, or {@code null}
      * @param displayMode the display mode
+     * @param inputMode the input mode
+     * @param inputSize the maximum input size
      */
-    public void imeOn(String title, int maxChars, int mode, int displayMode) {
-        String result = JOptionPane.showInputDialog(null, title == null ? "" : title);
-        if (result == null) {
-            processIMEEvent(IME_CANCELED, null);
+    public void imeOn(String text, int displayMode, int inputMode, int inputSize) {
+        DoJaRuntime runtime = DoJaRuntime.current();
+        if (runtime == null || Display.getCurrent() != this || runtime.isDialogShowing()) {
             return;
         }
-        if (maxChars > 0 && result.length() > maxChars) {
-            result = result.substring(0, maxChars);
+        ensureImeCallableState(runtime);
+        validateDisplayMode(displayMode);
+        validateInputMode(inputMode);
+        if (inputSize <= 0) {
+            throw new IllegalArgumentException("inputSize");
         }
-        processIMEEvent(IME_COMMITTED, result);
+        String normalized = text == null ? "" : text;
+        if (HostTextInput.inputUnits(normalized) > inputSize) {
+            throw new IllegalArgumentException("text");
+        }
+        HostTextInput.requestIme(this, text, displayMode, inputMode, inputSize);
     }
 
     /**
@@ -176,6 +202,24 @@ public abstract class Canvas extends Frame {
      */
     public void processIMEEvent(int type, String text) {
         return;
+    }
+
+    private static void validateDisplayMode(int displayMode) {
+        if (displayMode != TextBox.DISPLAY_ANY && displayMode != TextBox.DISPLAY_PASSWORD) {
+            throw new IllegalArgumentException("displayMode");
+        }
+    }
+
+    private static void validateInputMode(int inputMode) {
+        if (inputMode != TextBox.NUMBER && inputMode != TextBox.ALPHA && inputMode != TextBox.KANA) {
+            throw new IllegalArgumentException("inputMode");
+        }
+    }
+
+    private static void ensureImeCallableState(DoJaRuntime runtime) {
+        if (runtime.application() instanceof MApplication application && !application.isActive()) {
+            throw new IllegalStateException("Application is inactive");
+        }
     }
 
     /**

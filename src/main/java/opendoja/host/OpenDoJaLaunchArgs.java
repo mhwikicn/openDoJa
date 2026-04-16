@@ -126,6 +126,10 @@ public final class OpenDoJaLaunchArgs {
     public static final String GPS_TRACKING_SUPPORTED = "opendoja.gpsTrackingSupported";
     /** Fixed integer host scale, or {@code fullscreen} for platform fullscreen. */
     public static final String HOST_SCALE = "opendoja.hostScale";
+    /** Automated IME response used by host-side probes instead of showing a desktop dialog. */
+    public static final String IME_AUTOMATION_RESPONSE = "opendoja.imeAutomationResponse";
+    /** Delay in milliseconds before the automated IME response is delivered. */
+    public static final String IME_AUTOMATION_DELAY_MS = "opendoja.imeAutomationDelayMs";
     /** Hostname to force for outbound HTTP requests. */
     public static final String HTTP_OVERRIDE_DOMAIN = "opendoja.httpOverrideDomain";
     /** Override value returned for microedition.platform during launch. */
@@ -311,6 +315,8 @@ public final class OpenDoJaLaunchArgs {
             GPS_SUPPORTED,
             GPS_TRACKING_SUPPORTED,
             HOST_SCALE,
+            IME_AUTOMATION_RESPONSE,
+            IME_AUTOMATION_DELAY_MS,
             HTTP_OVERRIDE_DOMAIN,
             MICROEDITION_PLATFORM_OVERRIDE,
             TERMINAL_ID,
@@ -549,6 +555,8 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(GPS_SUPPORTED, () -> "true");
         defaults.put(GPS_TRACKING_SUPPORTED, () -> "true");
         defaults.put(HOST_SCALE, () -> "1");
+        defaults.put(IME_AUTOMATION_RESPONSE, () -> "");
+        defaults.put(IME_AUTOMATION_DELAY_MS, () -> "0");
         defaults.put(HTTP_OVERRIDE_DOMAIN, () -> "");
         defaults.put(MICROEDITION_PLATFORM_OVERRIDE, () -> "");
         defaults.put(TERMINAL_ID, OpenDoJaIdentity::defaultTerminalId);
