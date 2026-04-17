@@ -46,7 +46,6 @@ public final class RuntimeApplicationCallbackHostEventProbe {
             if (canvas == null) {
                 throw new IllegalStateException("Probe canvas was not installed");
             }
-
             runtime.postApplicationCallback(canvas::handleQueuedCallback);
             runtime.dispatchSyntheticKey(Display.KEY_LEFT, Display.KEY_PRESSED_EVENT);
 

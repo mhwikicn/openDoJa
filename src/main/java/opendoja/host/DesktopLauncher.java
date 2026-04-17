@@ -19,6 +19,9 @@ public final class DesktopLauncher {
     public static IApplication launch(LaunchConfig config) {
         DoJaRuntime runtime = null;
         boolean launched = false;
+        ClassLoader previousLoader = Thread.currentThread().getContextClassLoader();
+        // JAM-loaded titles expect ordinary context-loader resource lookups to resolve against the app jar.
+        Thread.currentThread().setContextClassLoader(config.applicationClass().getClassLoader());
         try {
             DoJaRuntime.prepareLaunch(config);
             runtime = DoJaRuntime.bootstrap(config);
@@ -34,6 +37,7 @@ public final class DesktopLauncher {
                 runtime.abortLaunch();
             }
             DoJaRuntime.clearPreparedLaunch();
+            Thread.currentThread().setContextClassLoader(previousLoader);
         }
     }
 

@@ -49,16 +49,9 @@ public final class DoJaRuntime {
     private final AtomicBoolean shutdown = new AtomicBoolean();
     private final CountDownLatch shutdownLatch = new CountDownLatch(1);
     private final ReentrantLock surfaceLock = new ReentrantLock(true);
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread thread = new Thread(r, "openDoJa-runtime");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private final java.util.concurrent.ExecutorService renderExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "openDoJa-render");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final ScheduledExecutorService scheduler;
+    private final java.util.concurrent.ExecutorService eventExecutor;
+    private final java.util.concurrent.ExecutorService renderExecutor;
     // Runtime-posted callbacks let host-side services feed work back onto the
     // same execution model that DoJa titles already use for paint/event code.
     private final ConcurrentLinkedQueue<Runnable> applicationCallbacks = new ConcurrentLinkedQueue<>();
@@ -82,6 +75,7 @@ public final class DoJaRuntime {
     private JFrame frameWindow;
     private GraphicsDevice fullScreenDevice;
     private Frame currentFrame;
+    private volatile boolean currentCanvasPresentedByApplication;
     private volatile Canvas presentedCanvas;
     private volatile BufferedImage presentedFrame;
     private volatile long keypadStateBits;
@@ -97,6 +91,9 @@ public final class DoJaRuntime {
 
     private DoJaRuntime(LaunchConfig config) {
         this.config = config;
+        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> newRuntimeThread(r, "openDoJa-runtime"));
+        this.eventExecutor = Executors.newSingleThreadExecutor(r -> newRuntimeThread(r, "MainEventDispatchThread"));
+        this.renderExecutor = Executors.newSingleThreadExecutor(r -> newRuntimeThread(r, "openDoJa-render"));
         this.enabledKeypadGroups.add(0);
         this.hostScaleSetting = resolveHostScale(config);
         this.externalFrameRenderer = new ExternalFrameRenderer(
@@ -132,6 +129,14 @@ public final class DoJaRuntime {
                 updateFullScreenTopHint((JFrame) e.getWindow(), false);
             }
         };
+    }
+
+    private Thread newRuntimeThread(Runnable runnable, String name) {
+        Thread thread = new Thread(runnable, name);
+        thread.setDaemon(true);
+        // Runtime-owned workers need the same resource lookup view as the launched application.
+        thread.setContextClassLoader(config.applicationClass().getClassLoader());
+        return thread;
     }
 
     public static void prepareLaunch(LaunchConfig config) {
@@ -193,9 +198,16 @@ public final class DoJaRuntime {
         applicationCallbacks.add(callback);
         Frame frame = currentFrame;
         if (frame instanceof Canvas canvas) {
-            // Direct-canvas titles commonly drive their own synchronized paint
-            // loop. Request a render so the callback is drained on that app
-            // path instead of on an unrelated host thread.
+            // Once a canvas has actually presented from outside the runtime render
+            // worker, queued callbacks can ride that app-owned lock/unlock path.
+            // Forcing requestRender(canvas) after that would inject an extra host
+            // paint into the application's own presentation loop.
+            if (currentCanvasPresentedByApplication) {
+                return;
+            }
+            // Non-direct canvas titles still need a render wakeup so the
+            // callback is drained on the canvas/application path instead of
+            // on an unrelated host thread.
             requestRender(canvas);
             return;
         }
@@ -330,6 +342,7 @@ public final class DoJaRuntime {
         }
         closeShutdownResources();
         scheduler.shutdownNow();
+        eventExecutor.shutdownNow();
         renderExecutor.shutdownNow();
         JFrame window = frameWindow;
         if (window != null) {
@@ -375,8 +388,12 @@ public final class DoJaRuntime {
         if (frame != null) {
             keypadConfigurationLocked = true;
         }
+        Frame previousFrame = this.currentFrame;
         this.currentFrame = frame;
         if (frame instanceof Canvas canvas) {
+            if (previousFrame != canvas) {
+                currentCanvasPresentedByApplication = false;
+            }
             ensureCanvasSurface(canvas);
             if (presentedCanvas != canvas || presentedFrame == null) {
                 presentedFrame = snapshotCanvasImage(canvas);
@@ -384,6 +401,7 @@ public final class DoJaRuntime {
             presentedCanvas = canvas;
             requestRender(canvas);
         } else {
+            currentCanvasPresentedByApplication = false;
             presentedCanvas = null;
             presentedFrame = null;
             repaintWindow();
@@ -626,17 +644,13 @@ public final class DoJaRuntime {
         if (!(currentFrame instanceof Canvas canvas)) {
             return;
         }
-        // Some titles keep a synchronized paint loop alive for the lifetime of the canvas and poll
-        // keypad state there instead of reacting to processEvent callbacks immediately. Queue the
-        // callback onto the application/render path so host input never wedges the Swing EDT while
-        // still preserving the callback ordering expected by canvas-driven apps.
-        postApplicationCallback(() -> {
+        dispatchCanvasUiEvent(canvas, () -> {
             if (TRACE_EVENTS) {
                 OpenDoJaLog.debug(DoJaRuntime.class, () -> "key event type=" + eventType + " key=" + dojaKey + " canvas=" + canvas.getClass().getName());
             }
             canvas.processEvent(eventType, dojaKey);
             repaintWindow();
-        });
+        }, eventType);
     }
 
     public void dispatchHostSoftKey(int softKey, int eventType) {
@@ -644,13 +658,16 @@ public final class DoJaRuntime {
         if (frame == null) {
             return;
         }
-        postApplicationCallback(() -> {
+        dispatchUiEvent(() -> {
             if (TRACE_EVENTS) {
                 OpenDoJaLog.debug(DoJaRuntime.class,
                         () -> "soft-key event type=" + eventType + " key=" + softKey + " frame=" + frame.getClass().getName());
             }
             frame.processSoftKeyEvent(eventType, softKey);
             repaintWindow();
+            if (frame == currentFrame && frame instanceof Canvas canvas && !currentCanvasPresentedByApplication) {
+                requestRender(canvas);
+            }
         });
     }
 
@@ -670,6 +687,9 @@ public final class DoJaRuntime {
     }
 
     public void notifySurfaceFlush(Canvas canvas, BufferedImage frame) {
+        if (canvas == currentFrame && Thread.currentThread() != renderThread) {
+            currentCanvasPresentedByApplication = true;
+        }
         if (openGlesFpsEnabled) {
             openGlesFpsOverlay.recordFrame(canvas, canvasUsesOpenGles(canvas));
         }
@@ -712,6 +732,34 @@ public final class DoJaRuntime {
                 && Thread.currentThread() != renderThread
                 && !Thread.holdsLock(canvas)
                 && !SwingUtilities.isEventDispatchThread();
+    }
+
+    private void dispatchCanvasUiEvent(Canvas canvas, Runnable eventTask, int eventType) {
+        dispatchUiEvent(() -> {
+            eventTask.run();
+            if (eventType == Display.KEY_RELEASED_EVENT) {
+                return;
+            }
+            if (canvas == currentFrame && !currentCanvasPresentedByApplication) {
+                requestRender(canvas);
+            }
+        });
+    }
+
+    private void dispatchUiEvent(Runnable eventTask) {
+        if (eventTask == null || shutdown.get()) {
+            return;
+        }
+        try {
+            eventExecutor.execute(() -> {
+                try {
+                    eventTask.run();
+                } catch (Throwable throwable) {
+                    OpenDoJaLog.error(DoJaRuntime.class, "Unhandled UI event failure", throwable);
+                }
+            });
+        } catch (RejectedExecutionException ignored) {
+        }
     }
 
     private void releaseRenderSlot() {
