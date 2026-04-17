@@ -75,6 +75,9 @@ public final class DoJaRuntime {
     private JFrame frameWindow;
     private GraphicsDevice fullScreenDevice;
     private Frame currentFrame;
+    // `presentedCanvas` / `presentedFrame` only tell us what is currently visible. We still need
+    // one explicit bit to remember whether the active canvas has already presented from the
+    // application-owned direct graphics path, because only that fact suppresses extra host paints.
     private volatile boolean currentCanvasPresentedByApplication;
     private volatile Canvas presentedCanvas;
     private volatile BufferedImage presentedFrame;
@@ -737,7 +740,9 @@ public final class DoJaRuntime {
     private void dispatchCanvasUiEvent(Canvas canvas, Runnable eventTask, int eventType) {
         dispatchUiEvent(() -> {
             eventTask.run();
-            if (eventType == Display.KEY_RELEASED_EVENT) {
+            // Only the press edge needs a host wakeup here. Doing the same on release would force
+            // a second host paint for the same key cycle and reintroduce duplicate-paint races.
+            if (eventType != Display.KEY_PRESSED_EVENT) {
                 return;
             }
             if (canvas == currentFrame && !currentCanvasPresentedByApplication) {
