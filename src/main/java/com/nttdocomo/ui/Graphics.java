@@ -1219,9 +1219,14 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
      * Sets r G B Pixel.
      */
     public void setRGBPixel(int x, int y, int color) {
+        int drawX = originX + x;
+        int drawY = originY + y;
+        if (!isVisibleSoftwarePixel(drawX, drawY)) {
+            return;
+        }
         prepareSoftwareSurfaceMutation();
-        surface.image().setRGB(originX + x, originY + y, toOpaqueRgb(color));
-        flushSurfacePresentation();
+        surface.image().setRGB(drawX, drawY, toOpaqueRgb(color));
+        flushSurfacePresentation(new Rectangle(drawX, drawY, 1, 1));
     }
 
     /**
@@ -1267,6 +1272,14 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             }
         }
         return false;
+    }
+
+    private boolean isVisibleSoftwarePixel(int x, int y) {
+        if (x < 0 || y < 0 || x >= surface.width() || y >= surface.height()) {
+            return false;
+        }
+        Rectangle clipBounds = delegate.getClipBounds();
+        return clipBounds == null || clipBounds.contains(x, y);
     }
 
     private static int[] opaqueRgbPixels(int[] pixels, int offset, int length) {

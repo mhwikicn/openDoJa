@@ -16,9 +16,18 @@ public final class GraphicsRgbPixelProbe {
         graphics.setRGBPixel(0, 0, 0x00010203);
         assertPixel("single RGB write ignores top byte", graphics.getRGBPixel(0, 0), 0xFF010203);
 
+        graphics.setRGBPixel(-1, 0, 0x00ABCDEF);
+        graphics.setRGBPixel(2, 1, 0x00ABCDEF);
+        graphics.setRGBPixel(1, 2, 0x00ABCDEF);
+        assertPixel("off-surface RGB writes are ignored", graphics.getRGBPixel(0, 0), 0xFF010203);
+
         graphics.setRGBPixels(0, 1, 2, 1, new int[]{0x000A0B0C, 0x7F0D0E0F}, 0);
         assertPixel("bulk RGB write treats zero alpha byte as opaque", graphics.getRGBPixel(0, 1), 0xFF0A0B0C);
         assertPixel("bulk RGB write ignores non-zero top byte", graphics.getRGBPixel(1, 1), 0xFF0D0E0F);
+
+        graphics.setClip(0, 0, 1, 1);
+        graphics.setRGBPixel(1, 0, 0x00112233);
+        assertPixel("clipped RGB writes are ignored", graphics.getRGBPixel(0, 0), 0xFF010203);
 
         Image fromPixels = Image.createImage(1, 1, new int[]{0x00112233}, 0);
         assertPixel("RGB image creation treats zero alpha byte as opaque",
