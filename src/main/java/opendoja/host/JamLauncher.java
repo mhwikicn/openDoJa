@@ -12,9 +12,6 @@ import java.util.Map;
 import java.util.Properties;
 
 public final class JamLauncher {
-    private static final String PHONE_MODEL_FLAG = "--phone-model";
-    private static final String LAUNCH_TYPE_FLAG = "--launch-type";
-
     private JamLauncher() {
     }
 
@@ -98,14 +95,14 @@ public final class JamLauncher {
         LaunchConfig.LaunchTypeOption launchType = LaunchConfig.LaunchTypeOption.resolveConfigured();
         List<String> effectiveArgs = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
-            if (PHONE_MODEL_FLAG.equals(args[i])) {
+            if (OpenDoJaCliFlags.PHONE_MODEL.equals(args[i])) {
                 if (i + 1 >= args.length) {
                     throw new IllegalArgumentException("Usage: " + usageLine());
                 }
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.MICROEDITION_PLATFORM_OVERRIDE, args[++i]);
                 continue;
             }
-            if (LAUNCH_TYPE_FLAG.equals(args[i])) {
+            if (OpenDoJaCliFlags.LAUNCH_TYPE.equals(args[i])) {
                 if (i + 1 >= args.length) {
                     throw new IllegalArgumentException("Usage: " + usageLine());
                 }
@@ -139,7 +136,8 @@ public final class JamLauncher {
     }
 
     private static String usageLine() {
-        return "JamLauncher [" + PHONE_MODEL_FLAG + " <model>] [" + LAUNCH_TYPE_FLAG + " <normal|standby>] <path-to-jam>";
+        return "JamLauncher [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
+                + OpenDoJaCliFlags.LAUNCH_TYPE + " <normal|standby>] <path-to-jam>";
     }
 
     private static LaunchConfig.LaunchTypeOption requireLaunchType(String value) {

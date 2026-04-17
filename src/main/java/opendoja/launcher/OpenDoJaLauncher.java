@@ -2,6 +2,7 @@ package opendoja.launcher;
 
 import opendoja.host.JamLauncher;
 import opendoja.host.LaunchConfig;
+import opendoja.host.OpenDoJaCliFlags;
 import opendoja.host.OpenDoJaLaunchArgs;
 import opendoja.host.OpenDoJaLog;
 
@@ -16,12 +17,6 @@ public final class OpenDoJaLauncher {
     static final String REPOSITORY_URL = "https://github.com/GrenderG/openDoJa";
     static final String LATEST_RELEASE_URL = REPOSITORY_URL + "/releases/latest";
     static final String GITHUB_LATEST_RELEASE_API_URL = "https://api.github.com/repos/GrenderG/openDoJa/releases/latest";
-    private static final String PHONE_MODEL_FLAG = "--phone-model";
-    private static final String LAUNCH_TYPE_FLAG = "--launch-type";
-    private static final String SHOW_OPEN_GLES_FPS_FLAG = "--show-gles-fps";
-    private static final String RUN_JAM_FLAG = "--run-jam";
-    private static final String RUN_JAM_INTERNAL_FLAG = "--run-jam-internal";
-    private static final String SPAWN_JAM_FLAG = "--spawn-jam";
 
     private OpenDoJaLauncher() {
     }
@@ -38,21 +33,21 @@ public final class OpenDoJaLauncher {
     private static void run(String[] args) throws Exception {
         List<String> effectiveArgs = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
-            if (PHONE_MODEL_FLAG.equals(args[i])) {
+            if (OpenDoJaCliFlags.PHONE_MODEL.equals(args[i])) {
                 if (i + 1 >= args.length) {
                     throw new IllegalArgumentException("Usage: " + usageLine());
                 }
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.MICROEDITION_PLATFORM_OVERRIDE, args[++i]);
                 continue;
             }
-            if (LAUNCH_TYPE_FLAG.equals(args[i])) {
+            if (OpenDoJaCliFlags.LAUNCH_TYPE.equals(args[i])) {
                 if (i + 1 >= args.length) {
                     throw new IllegalArgumentException("Usage: " + usageLine());
                 }
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.LAUNCH_TYPE, requireLaunchType(args[++i]).id);
                 continue;
             }
-            if (SHOW_OPEN_GLES_FPS_FLAG.equals(args[i])) {
+            if (OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS.equals(args[i])) {
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.SHOW_OPEN_GLES_FPS, Boolean.TRUE.toString());
                 continue;
             }
@@ -74,16 +69,16 @@ public final class OpenDoJaLauncher {
             int exitCode = new LauncherProcessSupport().runInForeground(selection);
             System.exit(exitCode);
         }
-        if (effectiveArgs.size() == 2 && RUN_JAM_FLAG.equals(effectiveArgs.get(0))) {
+        if (effectiveArgs.size() == 2 && OpenDoJaCliFlags.RUN_JAM.equals(effectiveArgs.get(0))) {
             GameLaunchSelection selection = new JamGameJarResolver().resolve(Path.of(effectiveArgs.get(1)));
             int exitCode = new LauncherProcessSupport().runInForeground(selection);
             System.exit(exitCode);
         }
-        if (effectiveArgs.size() == 2 && RUN_JAM_INTERNAL_FLAG.equals(effectiveArgs.get(0))) {
+        if (effectiveArgs.size() == 2 && OpenDoJaCliFlags.RUN_JAM_INTERNAL.equals(effectiveArgs.get(0))) {
             JamLauncher.main(new String[]{Path.of(effectiveArgs.get(1)).toString()});
             return;
         }
-        if (effectiveArgs.size() == 2 && SPAWN_JAM_FLAG.equals(effectiveArgs.get(0))) {
+        if (effectiveArgs.size() == 2 && OpenDoJaCliFlags.SPAWN_JAM.equals(effectiveArgs.get(0))) {
             GameLaunchSelection selection = new JamGameJarResolver().resolve(Path.of(effectiveArgs.get(1)));
             Process process = new LauncherProcessSupport().startInBackground(selection);
             OpenDoJaLog.configureIfUnset(OpenDoJaLog.Level.INFO);
@@ -99,7 +94,7 @@ public final class OpenDoJaLauncher {
     }
 
     static String internalRunJamFlag() {
-        return RUN_JAM_INTERNAL_FLAG;
+        return OpenDoJaCliFlags.RUN_JAM_INTERNAL;
     }
 
     private static void configureLookAndFeel() {
@@ -115,17 +110,19 @@ public final class OpenDoJaLauncher {
     }
 
     private static String usageLine() {
-        return APP_NAME + " [" + PHONE_MODEL_FLAG + " <model>] [" + LAUNCH_TYPE_FLAG + " <normal|standby>] [" + SHOW_OPEN_GLES_FPS_FLAG + "] [<path-to-jam> | " + RUN_JAM_FLAG + " <path-to-jam> | "
-                + SPAWN_JAM_FLAG + " <path-to-jam>]";
+        return APP_NAME + " [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
+                + OpenDoJaCliFlags.LAUNCH_TYPE + " <normal|standby>] ["
+                + OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS + "] [<path-to-jam> | " + OpenDoJaCliFlags.RUN_JAM + " <path-to-jam> | "
+                + OpenDoJaCliFlags.SPAWN_JAM + " <path-to-jam>]";
     }
 
     private static String helpText() {
         return usageLine()
                 + "\n\nPass custom runtime properties before -jar, for example:"
                 + "\n  java -D" + OpenDoJaLaunchArgs.HOST_SCALE + "=fullscreen -jar target/opendoja-{version}.jar <game.jam>"
-                + "\n  java -jar target/opendoja-{version}.jar " + SHOW_OPEN_GLES_FPS_FLAG + " <game.jam>"
-                + "\n  java -jar target/opendoja-{version}.jar " + PHONE_MODEL_FLAG + " P900i <game.jam>"
-                + "\n  java -jar target/opendoja-{version}.jar " + LAUNCH_TYPE_FLAG + " standby <game.jam>"
+                + "\n  java -jar target/opendoja-{version}.jar " + OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS + " <game.jam>"
+                + "\n  java -jar target/opendoja-{version}.jar " + OpenDoJaCliFlags.PHONE_MODEL + " P900i <game.jam>"
+                + "\n  java -jar target/opendoja-{version}.jar " + OpenDoJaCliFlags.LAUNCH_TYPE + " standby <game.jam>"
                 + "\n\n" + OpenDoJaLaunchArgs.formatProperties();
     }
 
