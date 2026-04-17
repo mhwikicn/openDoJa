@@ -6,6 +6,7 @@ import com.acrodea.xf3.loader.xfeXF2ParameterizedControllerLoader;
 import com.acrodea.xf3.loader.xfeXF2Reader;
 import com.acrodea.xf3.math.xfMatrix4;
 import com.acrodea.xf3.*;
+import opendoja.host.DoJaRuntime;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -891,14 +892,7 @@ public final class xfeDefaultXF2Loader {
     }
 
     private static byte[] readResource(String path) throws IOException {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        if (loader == null) {
-            loader = xfeDefaultXF2Loader.class.getClassLoader();
-        }
-        if (loader == null) {
-            return null;
-        }
-        try (InputStream stream = loader.getResourceAsStream(path)) {
+        try (InputStream stream = DoJaRuntime.openLaunchResourceStream(path)) {
             return stream == null ? null : stream.readAllBytes();
         }
     }
