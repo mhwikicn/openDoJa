@@ -118,6 +118,8 @@ public final class Software3DContext {
 
     public void setOptScreenScale(int x, int y) {
         this.optPerspectiveEnabled = false;
+        this.optViewWidth = 0f;
+        this.optViewHeight = 0f;
         this.optScaleX = x == 0 ? 1f : x / 4096f;
         this.optScaleY = y == 0 ? 1f : y / 4096f;
     }

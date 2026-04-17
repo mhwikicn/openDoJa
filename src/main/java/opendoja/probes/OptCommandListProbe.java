@@ -27,6 +27,7 @@ public final class OptCommandListProbe {
         if (!Arrays.equals(documented, legacy)) {
             throw new IllegalStateException("Legacy and packed command-list headers produced different output");
         }
+        verifyCommandScaleOverridesPreviousScreenView();
 
         Set<Integer> unique = new HashSet<>();
         int opaquePixels = 0;
@@ -43,6 +44,27 @@ public final class OptCommandListProbe {
         }
         DemoLog.info(OptCommandListProbe.class, "Opt command-list probe OK opaquePixels="
                 + opaquePixels + " uniqueColors=" + unique.size());
+    }
+
+    private static void verifyCommandScaleOverridesPreviousScreenView() throws Exception {
+        Image image = Image.createImage(64, 64);
+        Graphics graphics = image.getGraphics();
+        graphics.setColor(Graphics.getColorOfRGB(0, 0, 0));
+        graphics.fillRect(0, 0, 64, 64);
+        graphics.setPrimitiveTextureArray(new Texture(makeTexture(), true));
+        graphics.setScreenView(1, 1);
+        graphics.executeCommandList(buildScaledCommandList());
+
+        int[] pixels = graphics.getRGBPixels(0, 0, 64, 64, null, 0);
+        int visiblePixels = 0;
+        for (int pixel : pixels) {
+            if ((pixel & 0x00FFFFFF) != 0) {
+                visiblePixels++;
+            }
+        }
+        if (visiblePixels == 0) {
+            throw new IllegalStateException("COMMAND_SCREEN_SCALE did not override the previous screen-view projection");
+        }
     }
 
     private static int[] render(int version) throws Exception {
@@ -75,6 +97,28 @@ public final class OptCommandListProbe {
                 0, 0, 4096,
                 0, 0, 4096,
                 0, 0, 4096,
+                0, 0,
+                255, 0,
+                255, 255,
+                0, 255,
+                Graphics3D.COMMAND_FLUSH,
+                Graphics3D.COMMAND_END
+        };
+    }
+
+    private static int[] buildScaledCommandList() {
+        return new int[]{
+                Graphics3D.COMMAND_LIST_VERSION_1,
+                Graphics3D.COMMAND_SCREEN_CENTER, 32, 32,
+                Graphics3D.COMMAND_SCREEN_SCALE, 4096, 4096,
+                Graphics3D.COMMAND_TEXTURE,
+                Graphics3D.COMMAND_RENDER_QUADS
+                        | Graphics3D.TEXTURE_COORD_PER_VERTEX
+                        | (1 << 16),
+                -16, -16, 0,
+                16, -16, 0,
+                16, 16, 0,
+                -16, 16, 0,
                 0, 0,
                 255, 0,
                 255, 255,
