@@ -222,7 +222,7 @@ public final class Software3DContext {
         renderPrimitiveBuffer(g, target, originX, originY, surfaceWidth, surfaceHeight, primitiveType, primitiveParam,
                 0, primitiveCount, vertexArray, colorArray, textureCoordArray, null, texture, effectiveTransform,
                 projection, uiClip, surfaceWidth / 2f, surfaceHeight / 2f, uiOrthoWidth, uiOrthoHeight, true,
-                (primitiveParam & 0x10) != 0, blendMode, transparency, false, false, true, true,
+                (primitiveParam & 0x10) != 0, blendMode, transparency, false, true, true,
                 uiFog, null, null, textureTranslateU, textureTranslateV, depthTest, depthWrite, doubleSided,
                 BlendSemantics.UI_GRAPHICS3D);
     }
@@ -289,7 +289,7 @@ public final class Software3DContext {
                 primitives.getVertexArray(), primitives.getColorArray(), primitives.getTextureCoordArray(), primitives.getPointSpriteArray(),
                 texture, optViewTransform, projection, optClip,
                 optScreenCenterX, optScreenCenterY, resolveOptOrthoWidth(surfaceWidth), resolveOptOrthoHeight(surfaceHeight),
-                optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, false, true, true,
+                optSemiTransparent, (attr & 0x10) != 0, attr & 0x60, 1f, true, true, true,
                 null, sphereTexture, toonShader, 0f, 0f, true, true, true, BlendSemantics.FRAMEBUFFER);
     }
 
@@ -327,7 +327,6 @@ public final class Software3DContext {
                     pending.blendMode(),
                     1f,
                     true,
-                    false,
                     true,
                     false,
                     null,
@@ -507,7 +506,7 @@ public final class Software3DContext {
                                        float[] transform, Projection projection, Rectangle clip,
                                        float centerX, float centerY, float orthoWidth, float orthoHeight,
                                        boolean allowBlend, boolean transparentPaletteZero, int blendMode, float transparency,
-                                       boolean unsignedByteTextureCoords, boolean invertScreenY, boolean opaqueRgbColors, boolean depthWrite,
+                                       boolean unsignedByteTextureCoords, boolean opaqueRgbColors, boolean depthWrite,
                                        FogState fog, SoftwareTexture sphereTexture, ToonShaderParams defaultToonShader,
                                        float textureTranslateU, float textureTranslateV, boolean depthTest,
                                        boolean effectiveDepthWrite, boolean doubleSided,
@@ -592,12 +591,12 @@ public final class Software3DContext {
                     float projectedX = pointX * projection.scaleX() / java.lang.Math.max(0.0001f, cameraDepth);
                     float projectedY = pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth);
                     xs[0] = originX + centerX + projectedX;
-                    ys[0] = projectScreenY(originY, centerY, projectedY, invertScreenY);
+                    ys[0] = projectScreenY(originY, centerY, projectedY, false);
                     depthValues[0] = 1.0f / java.lang.Math.max(0.0001f, cameraDepth);
                     avgDepth = cameraDepth;
                 } else {
                     xs[0] = originX + centerX + (pointX * (surfaceWidth / java.lang.Math.max(1f, orthoWidth)));
-                    ys[0] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), invertScreenY);
+                    ys[0] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), false);
                     depthValues[0] = -pointZ;
                     avgDepth = pointZ;
                 }
@@ -635,12 +634,12 @@ public final class Software3DContext {
                 if (projection != null) {
                     float cameraDepth = pointZ + projection.depthOffset();
                     xs[i] = originX + centerX + (pointX * projection.scaleX() / java.lang.Math.max(0.0001f, cameraDepth));
-                    ys[i] = projectScreenY(originY, centerY, pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth), invertScreenY);
+                    ys[i] = projectScreenY(originY, centerY, pointY * projection.scaleY() / java.lang.Math.max(0.0001f, cameraDepth), false);
                     depthValues[i] = 1.0f / java.lang.Math.max(0.0001f, cameraDepth);
                     avgDepth += cameraDepth;
                 } else {
                     xs[i] = originX + centerX + (pointX * (surfaceWidth / java.lang.Math.max(1f, orthoWidth)));
-                    ys[i] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), invertScreenY);
+                    ys[i] = projectScreenY(originY, centerY, pointY * (surfaceHeight / java.lang.Math.max(1f, orthoHeight)), false);
                     depthValues[i] = -pointZ;
                     avgDepth += pointZ;
                 }
