@@ -9,6 +9,8 @@ public final class OpenDoJaCliFlags {
     public static final String PHONE_MODEL = "--phone-model";
     /** Forces the i-appli launch mode, for example normal or standby startup. */
     public static final String LAUNCH_TYPE = "--launch-type";
+    /** Rotates the presented display output: none, left, or right. */
+    public static final String SCREEN_ROTATION = "--screen-rotation";
     /** Enables the host OpenGL ES FPS overlay for renderer diagnostics. */
     public static final String SHOW_OPEN_GLES_FPS = "--show-gles-fps";
     /** Runs the selected JAM in the current launcher process foreground path. */

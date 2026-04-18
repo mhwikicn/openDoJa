@@ -10,6 +10,7 @@ import opendoja.host.OpenGlesRendererMode;
 
 record LauncherSettings(
         String hostScale,
+        String displayRotation,
         String synthId,
         String terminalId,
         String userId,
@@ -26,6 +27,7 @@ record LauncherSettings(
         HostKeybindConfiguration keybindConfiguration) {
     LauncherSettings {
         hostScale = HostScale.normalizeId(hostScale);
+        displayRotation = OpenDoJaLaunchArgs.normalizeDisplayRotation(displayRotation);
         synthId = normalizeSynthId(synthId);
         terminalId = OpenDoJaIdentity.normalizeTerminalId(terminalId);
         userId = OpenDoJaIdentity.normalizeUserId(userId);
@@ -40,7 +42,7 @@ record LauncherSettings(
     }
 
     static LauncherSettings defaults() {
-        return new LauncherSettings(HostScale.DEFAULT_ID, MLDSynth.DEFAULT.id,
+        return new LauncherSettings(HostScale.DEFAULT_ID, "none", MLDSynth.DEFAULT.id,
                 OpenDoJaIdentity.defaultTerminalId(),
                 OpenDoJaIdentity.defaultUserId(),
                 LaunchConfig.FontType.BITMAP.id,
@@ -68,7 +70,7 @@ record LauncherSettings(
                      boolean showOpenGlesFps,
                      boolean disableBytecodeVerification,
                      boolean disableOsDpiScaling) {
-        this(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain, fileEncodingOverride,
+        this(hostScale, "none", synthId, terminalId, userId, fontType, httpOverrideDomain, fileEncodingOverride,
                 microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, 1,
                 LaunchConfig.LaunchTypeOption.NORMAL.id, HostKeybindConfiguration.defaults());
@@ -86,7 +88,7 @@ record LauncherSettings(
                      boolean showOpenGlesFps,
                      boolean disableBytecodeVerification,
                      boolean disableOsDpiScaling) {
-        this(Integer.toString(hostScale), synthId, terminalId, userId, fontType, httpOverrideDomain, fileEncodingOverride,
+        this(Integer.toString(hostScale), "none", synthId, terminalId, userId, fontType, httpOverrideDomain, fileEncodingOverride,
                 microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, 1,
                 LaunchConfig.LaunchTypeOption.NORMAL.id, HostKeybindConfiguration.defaults());
@@ -109,7 +111,7 @@ record LauncherSettings(
     }
 
     LauncherSettings withHostScale(String hostScale) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
@@ -120,98 +122,105 @@ record LauncherSettings(
     }
 
     LauncherSettings withSynthId(String synthId) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withTerminalId(String terminalId) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withUserId(String userId) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withFontType(String fontType) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withHttpOverrideDomain(String httpOverrideDomain) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withFileEncodingOverride(String fileEncodingOverride) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withMicroeditionPlatformOverride(String microeditionPlatformOverride) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withOpenGlesRendererMode(OpenGlesRendererMode openGlesRendererMode) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withShowOpenGlesFps(boolean showOpenGlesFps) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withDisableBytecodeVerification(boolean disableBytecodeVerification) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withDisableOsDpiScaling(boolean disableOsDpiScaling) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withOpenGlesSupersampleScale(int openGlesSupersampleScale) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withLaunchType(String launchType) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
+                fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
+                disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
+                launchType, keybindConfiguration);
+    }
+
+    LauncherSettings withDisplayRotation(String displayRotation) {
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);
     }
 
     LauncherSettings withKeybindConfiguration(HostKeybindConfiguration keybindConfiguration) {
-        return new LauncherSettings(hostScale, synthId, terminalId, userId, fontType, httpOverrideDomain,
+        return new LauncherSettings(hostScale, displayRotation, synthId, terminalId, userId, fontType, httpOverrideDomain,
                 fileEncodingOverride, microeditionPlatformOverride, openGlesRendererMode, showOpenGlesFps,
                 disableBytecodeVerification, disableOsDpiScaling, openGlesSupersampleScale,
                 launchType, keybindConfiguration);

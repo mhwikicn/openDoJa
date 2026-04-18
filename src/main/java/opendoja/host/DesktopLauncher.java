@@ -58,10 +58,22 @@ public final class DesktopLauncher {
                 if (i + 1 >= args.length) {
                     throw new IllegalArgumentException(
                             "Usage: DesktopLauncher [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
+                                    + OpenDoJaCliFlags.SCREEN_ROTATION + " <none|left|right>] ["
                                     + OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS
                                     + "] <fully.qualified.IApplicationClass> [args...]");
                 }
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.MICROEDITION_PLATFORM_OVERRIDE, args[++i]);
+                continue;
+            }
+            if (OpenDoJaCliFlags.SCREEN_ROTATION.equals(args[i])) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException(
+                            "Usage: DesktopLauncher [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
+                                    + OpenDoJaCliFlags.SCREEN_ROTATION + " <none|left|right>] ["
+                                    + OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS
+                                    + "] <fully.qualified.IApplicationClass> [args...]");
+                }
+                OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.DISPLAY_ROTATION, requireDisplayRotation(args[++i]));
                 continue;
             }
             if (OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS.equals(args[i])) {
@@ -73,6 +85,7 @@ public final class DesktopLauncher {
         if (effectiveArgs.isEmpty()) {
             throw new IllegalArgumentException(
                     "Usage: DesktopLauncher [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
+                            + OpenDoJaCliFlags.SCREEN_ROTATION + " <none|left|right>] ["
                             + OpenDoJaCliFlags.SHOW_OPEN_GLES_FPS
                             + "] <fully.qualified.IApplicationClass> [args...]");
         }
@@ -105,5 +118,14 @@ public final class DesktopLauncher {
             }
         }
         System.exit(0);
+    }
+
+    private static String requireDisplayRotation(String value) {
+        String normalized = OpenDoJaLaunchArgs.normalizeDisplayRotation(value);
+        if (!normalized.equals(value == null ? null : value.trim().toLowerCase(java.util.Locale.ROOT))) {
+            throw new IllegalArgumentException(
+                    "Unknown screen rotation: " + value + ". Expected none, left, or right.");
+        }
+        return normalized;
     }
 }

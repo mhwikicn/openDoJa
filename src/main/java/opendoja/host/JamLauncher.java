@@ -110,6 +110,13 @@ public final class JamLauncher {
                 OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.LAUNCH_TYPE, launchType.id);
                 continue;
             }
+            if (OpenDoJaCliFlags.SCREEN_ROTATION.equals(args[i])) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException("Usage: " + usageLine());
+                }
+                OpenDoJaLaunchArgs.set(OpenDoJaLaunchArgs.DISPLAY_ROTATION, requireDisplayRotation(args[++i]));
+                continue;
+            }
             effectiveArgs.add(args[i]);
         }
         if (effectiveArgs.size() != 1) {
@@ -137,7 +144,8 @@ public final class JamLauncher {
 
     private static String usageLine() {
         return "JamLauncher [" + OpenDoJaCliFlags.PHONE_MODEL + " <model>] ["
-                + OpenDoJaCliFlags.LAUNCH_TYPE + " <normal|standby>] <path-to-jam>";
+                + OpenDoJaCliFlags.LAUNCH_TYPE + " <normal|standby>] ["
+                + OpenDoJaCliFlags.SCREEN_ROTATION + " <none|left|right>] <path-to-jam>";
     }
 
     private static LaunchConfig.LaunchTypeOption requireLaunchType(String value) {
@@ -146,6 +154,15 @@ public final class JamLauncher {
             throw new IllegalArgumentException("Unknown launch type: " + value + ". Expected normal or standby.");
         }
         return launchType;
+    }
+
+    private static String requireDisplayRotation(String value) {
+        String normalized = OpenDoJaLaunchArgs.normalizeDisplayRotation(value);
+        if (!normalized.equals(value == null ? null : value.trim().toLowerCase(java.util.Locale.ROOT))) {
+            throw new IllegalArgumentException(
+                    "Unknown screen rotation: " + value + ". Expected none, left, or right.");
+        }
+        return normalized;
     }
 
     private static String resolvePackageUrl(Path jamPath, String packageUrl) {

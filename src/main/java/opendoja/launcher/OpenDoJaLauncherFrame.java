@@ -85,6 +85,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
 
         JMenu settingsMenu = new JMenu("Settings");
         settingsMenu.add(buildHostScaleMenu());
+        settingsMenu.add(buildDisplayRotationMenu());
         settingsMenu.add(buildSynthMenu());
         settingsMenu.add(buildFontTypeMenu());
         settingsMenu.add(buildLaunchTypeMenu());
@@ -385,6 +386,32 @@ final class OpenDoJaLauncherFrame extends JFrame {
             fontTypeMenu.add(item);
         }
         return fontTypeMenu;
+    }
+
+    private JMenu buildDisplayRotationMenu() {
+        LauncherSettings settings = jamLaunchService.loadSettings();
+        JMenu displayRotationMenu = new JMenu("Screen Rotation");
+        ButtonGroup group = new ButtonGroup();
+        addDisplayRotationItem(displayRotationMenu, group, settings, "none", "None");
+        addDisplayRotationItem(displayRotationMenu, group, settings, "left", "90 Left");
+        addDisplayRotationItem(displayRotationMenu, group, settings, "right", "90 Right");
+        return displayRotationMenu;
+    }
+
+    private void addDisplayRotationItem(JMenu menu,
+                                        ButtonGroup group,
+                                        LauncherSettings settings,
+                                        String rotation,
+                                        String label) {
+        JRadioButtonMenuItem item = new JRadioButtonMenuItem(new AbstractAction(label) {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                saveSettings(current -> current.withDisplayRotation(rotation));
+            }
+        });
+        item.setSelected(settings.displayRotation().equals(rotation));
+        group.add(item);
+        menu.add(item);
     }
 
     private JMenu buildLaunchTypeMenu() {
