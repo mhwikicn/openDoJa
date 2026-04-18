@@ -67,6 +67,8 @@ public final class OpenDoJaLaunchArgs {
     public static final String DEBUG_FUE_TREK_CONTROL = "opendoja.debugFueTrekControl";
     /** Enables FueTrek note debug logging. */
     public static final String DEBUG_FUE_TREK_NOTES = "opendoja.debugFueTrekNotes";
+    /** Rotates the presented handset display output: none, left, or right. */
+    public static final String DISPLAY_ROTATION = "opendoja.displayRotation";
     /** Whether to draw the host handset frame. */
     public static final String EXTERNAL_FRAME = "opendoja.externalFrame";
     /** Disables external FeliCa speed discovery. */
@@ -290,6 +292,7 @@ public final class OpenDoJaLaunchArgs {
             DEBUG3D_CALLS,
             DEBUG_FUE_TREK_CONTROL,
             DEBUG_FUE_TREK_NOTES,
+            DISPLAY_ROTATION,
             EXTERNAL_FRAME,
             FELICA_EXTERNAL_NO_SPEED_DISCOVERY,
             FELICA_EXTERNAL_POLLED_IDM,
@@ -412,6 +415,10 @@ public final class OpenDoJaLaunchArgs {
         return normalizeLaunchType(get(LAUNCH_TYPE, ""));
     }
 
+    public static String displayRotation() {
+        return normalizeDisplayRotation(get(DISPLAY_ROTATION, ""));
+    }
+
     public static OpenGlesRendererMode openGlesRendererMode() {
         return OpenGlesRendererMode.fromId(get(OPEN_GLES_RENDERER));
     }
@@ -498,6 +505,17 @@ public final class OpenDoJaLaunchArgs {
         return LaunchConfig.LaunchTypeOption.normalizeId(candidate);
     }
 
+    public static String normalizeDisplayRotation(String candidate) {
+        if (candidate == null) {
+            return "none";
+        }
+        return switch (candidate.trim().toLowerCase(Locale.ROOT)) {
+            case "left" -> "left";
+            case "right" -> "right";
+            default -> "none";
+        };
+    }
+
     public static int normalizeOpenGlesSupersampleScale(int candidate) {
         return Math.clamp(candidate, 1, 5);
     }
@@ -540,6 +558,7 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(DEBUG3D_CALLS, () -> "false");
         defaults.put(DEBUG_FUE_TREK_CONTROL, () -> "false");
         defaults.put(DEBUG_FUE_TREK_NOTES, () -> "false");
+        defaults.put(DISPLAY_ROTATION, () -> "none");
         defaults.put(EXTERNAL_FRAME, () -> "true");
         defaults.put(FELICA_EXTERNAL_NO_SPEED_DISCOVERY, () -> "false");
         defaults.put(FELICA_EXTERNAL_POLLED_IDM, () -> "");

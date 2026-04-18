@@ -36,11 +36,13 @@ final class LauncherPreferencesStore {
     private static final String UPDATE_NOTIFICATIONS_ENABLED_KEY = "updateNotificationsEnabled";
     private static final String LAST_DIRECTORY_KEY = "lastDirectory";
     private static final String RECENT_JAM_KEY_PREFIX = "recentJam.";
+    private static final String DISPLAY_ROTATION_KEY = "displayRotation";
 
     private final Preferences preferences = Preferences.userNodeForPackage(OpenDoJaLauncher.class);
 
     LauncherSettings loadSettings() {
         String storedHostScale = preferences.get(HOST_SCALE_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HOST_SCALE));
+        String storedDisplayRotation = preferences.get(DISPLAY_ROTATION_KEY, OpenDoJaLaunchArgs.displayRotation());
         String storedSynthId = preferences.get(SYNTH_ID_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MLD_SYNTH));
         String storedTerminalId = preferences.get(TERMINAL_ID_KEY, OpenDoJaIdentity.defaultTerminalId());
         String storedUserId = preferences.get(USER_ID_KEY, OpenDoJaIdentity.defaultUserId());
@@ -69,6 +71,7 @@ final class LauncherPreferencesStore {
         }
         return new LauncherSettings(
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HOST_SCALE, storedHostScale),
+                OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.DISPLAY_ROTATION, storedDisplayRotation),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MLD_SYNTH, storedSynthId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.TERMINAL_ID, storedTerminalId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.USER_ID, storedUserId),
@@ -87,6 +90,7 @@ final class LauncherPreferencesStore {
 
     void saveSettings(LauncherSettings settings) {
         preferences.put(HOST_SCALE_KEY, settings.hostScale());
+        preferences.put(DISPLAY_ROTATION_KEY, settings.displayRotation());
         preferences.put(SYNTH_ID_KEY, settings.synthId());
         preferences.put(TERMINAL_ID_KEY, settings.terminalId());
         preferences.put(USER_ID_KEY, settings.userId());

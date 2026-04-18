@@ -4,6 +4,7 @@ import com.nttdocomo.ui.Frame;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,23 +57,26 @@ public final class ExternalFrameRenderer {
 
     public ExternalFrameLayout layoutFor(int viewportWidth, int viewportHeight, double scale) {
         double clampedScale = Math.max(0.01d, scale);
+        String rotation = OpenDoJaLaunchArgs.displayRotation();
+        int rotatedViewportWidth = rotates(rotation) ? viewportHeight : viewportWidth;
+        int rotatedViewportHeight = rotates(rotation) ? viewportWidth : viewportHeight;
         if (!enabled) {
-            Rectangle screenArea = new Rectangle(0, 0, viewportWidth, viewportHeight);
-            Rectangle drawArea = new Rectangle(0, 0, viewportWidth, viewportHeight);
+            Rectangle screenArea = new Rectangle(0, 0, rotatedViewportWidth, rotatedViewportHeight);
+            Rectangle drawArea = new Rectangle(0, 0, rotatedViewportWidth, rotatedViewportHeight);
             return new ExternalFrameLayout(false, clampedScale, screenArea, drawArea, new Rectangle(), new Rectangle(),
                     new Rectangle(), new Rectangle(), new Rectangle(), new Rectangle(),
-                    scaledDimension(viewportWidth, viewportHeight, clampedScale));
+                    scaledDimension(rotatedViewportWidth, rotatedViewportHeight, clampedScale));
         }
 
-        int outerWidth = viewportWidth + SIDE_WIDTH * 2;
-        int outerHeight = viewportHeight + TOP_HEIGHT + BOTTOM_HEIGHT;
+        int outerWidth = rotatedViewportWidth + SIDE_WIDTH * 2;
+        int outerHeight = rotatedViewportHeight + TOP_HEIGHT + BOTTOM_HEIGHT;
 
-        Rectangle screenArea = new Rectangle(SIDE_WIDTH, TOP_HEIGHT, viewportWidth, viewportHeight);
+        Rectangle screenArea = new Rectangle(SIDE_WIDTH, TOP_HEIGHT, rotatedViewportWidth, rotatedViewportHeight);
         Rectangle drawArea = new Rectangle(screenArea);
         Rectangle topBar = new Rectangle(0, 0, outerWidth, TOP_HEIGHT);
-        Rectangle bottomBar = new Rectangle(0, TOP_HEIGHT + viewportHeight, outerWidth, BOTTOM_HEIGHT);
-        Rectangle leftConnector = new Rectangle(0, TOP_HEIGHT, SIDE_WIDTH, viewportHeight);
-        Rectangle rightConnector = new Rectangle(SIDE_WIDTH + viewportWidth, TOP_HEIGHT, SIDE_WIDTH, viewportHeight);
+        Rectangle bottomBar = new Rectangle(0, TOP_HEIGHT + rotatedViewportHeight, outerWidth, BOTTOM_HEIGHT);
+        Rectangle leftConnector = new Rectangle(0, TOP_HEIGHT, SIDE_WIDTH, rotatedViewportHeight);
+        Rectangle rightConnector = new Rectangle(SIDE_WIDTH + rotatedViewportWidth, TOP_HEIGHT, SIDE_WIDTH, rotatedViewportHeight);
 
         Rectangle statusArea = new Rectangle(HORIZONTAL_INSET, VERTICAL_INSET,
                 Math.max(0, outerWidth - HORIZONTAL_INSET * 2),
@@ -140,8 +144,37 @@ public final class ExternalFrameRenderer {
         g.setColor(Color.BLACK);
         g.fillRect(screenArea.x, screenArea.y, screenArea.width, screenArea.height);
         if (drawImage != null) {
-            g.drawImage(drawImage, drawArea.x, drawArea.y, drawArea.width, drawArea.height, null);
+            paintRotatedImage(g, drawArea, drawImage);
         }
+    }
+
+    private void paintRotatedImage(Graphics2D g, Rectangle drawArea, BufferedImage drawImage) {
+        String rotation = OpenDoJaLaunchArgs.displayRotation();
+        if ("none".equals(rotation)) {
+            g.drawImage(drawImage, drawArea.x, drawArea.y, drawArea.width, drawArea.height, null);
+            return;
+        }
+        Graphics2D rotatedGraphics = (Graphics2D) g.create();
+        try {
+            AffineTransform transform = new AffineTransform();
+            if ("left".equals(rotation)) {
+                transform.translate(drawArea.x, drawArea.y + drawArea.height);
+                transform.rotate(-Math.PI / 2d);
+            } else {
+                transform.translate(drawArea.x + drawArea.width, drawArea.y);
+                transform.rotate(Math.PI / 2d);
+            }
+            transform.scale(
+                    drawArea.height / (double) Math.max(1, drawImage.getWidth()),
+                    drawArea.width / (double) Math.max(1, drawImage.getHeight()));
+            rotatedGraphics.drawImage(drawImage, transform, null);
+        } finally {
+            rotatedGraphics.dispose();
+        }
+    }
+
+    private static boolean rotates(String rotation) {
+        return "left".equals(rotation) || "right".equals(rotation);
     }
 
     private void paintSoftKeys(Graphics2D g, Rectangle softKeyArea, Frame frame) {
