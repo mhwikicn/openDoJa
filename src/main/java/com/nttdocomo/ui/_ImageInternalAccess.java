@@ -1,5 +1,7 @@
 package com.nttdocomo.ui;
 
+import java.awt.image.BufferedImage;
+
 /**
  * Host-side helpers for Image contract checks that are not part of the DoJa API surface.
  */
@@ -28,5 +30,16 @@ public final class _ImageInternalAccess {
         }
         image.getWidth();
         image.getHeight();
+    }
+
+    public static BufferedImage copyOpaqueSourceForTransparentImage(Image image) {
+        if (image == null) {
+            throw new NullPointerException("image");
+        }
+        if (!(image instanceof DesktopImage desktopImage)) {
+            // TransparentImage only accepts plain Image instances, not other extended image types.
+            throw new UIException(UIException.UNSUPPORTED_FORMAT, "Extended images are not supported");
+        }
+        return desktopImage.copyOpaqueSourceForTransparentImage();
     }
 }

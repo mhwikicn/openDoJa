@@ -2,6 +2,8 @@ package com.nttdocomo.opt.ui;
 
 import com.nttdocomo.ui.Graphics;
 import com.nttdocomo.ui.Image;
+import com.nttdocomo.ui._ImageInternalAccess;
+import com.nttdocomo.lang.UnsupportedOperationException;
 
 import java.awt.image.BufferedImage;
 
@@ -10,6 +12,7 @@ import java.awt.image.BufferedImage;
  */
 public class TransparentImage extends Image {
     private final Image delegate;
+    private boolean transparentEnabled;
 
     /**
      * Applications cannot create this object directly.
@@ -32,13 +35,13 @@ public class TransparentImage extends Image {
     }
 
     private TransparentImage(Image source) {
-        this.delegate = Image.createImage(source.getWidth(), source.getHeight());
-        Graphics g = delegate.getGraphics();
-        try {
-            g.drawImage(source, 0, 0);
-        } finally {
-            g.dispose();
-        }
+        // TransparentImage must ignore the source Image's active alpha and transparent-color state.
+        // Copy raw opaque pixels instead of drawing the source through Image.renderForDisplay().
+        BufferedImage opaqueSource = _ImageInternalAccess.copyOpaqueSourceForTransparentImage(source);
+        int width = opaqueSource.getWidth();
+        int height = opaqueSource.getHeight();
+        int[] pixels = opaqueSource.getRGB(0, 0, width, height, null, 0, width);
+        this.delegate = Image.createImage(width, height, pixels, 0);
     }
 
     /**
@@ -47,6 +50,8 @@ public class TransparentImage extends Image {
      * @param enabled {@code true} to enable transparent-color processing
      */
     public void setTransparentEnabled(boolean enabled) {
+        ensureActive();
+        transparentEnabled = enabled;
         delegate.setTransparentEnabled(enabled);
     }
 
@@ -56,7 +61,11 @@ public class TransparentImage extends Image {
      * @param color the transparent color
      */
     public void setTransparentColor(int color) {
+        ensureActive();
         delegate.setTransparentColor(color);
+        if (transparentEnabled) {
+            delegate.setTransparentEnabled(true);
+        }
     }
 
     /**
@@ -65,7 +74,7 @@ public class TransparentImage extends Image {
      * @return the transparent color
      */
     public int getTransparentColor() {
-        return delegate.getTransparentColor();
+        throw new UnsupportedOperationException("TransparentImage transparent color queries are not supported");
     }
 
     /**
@@ -74,7 +83,7 @@ public class TransparentImage extends Image {
      * @param alpha the alpha value
      */
     public void setAlpha(int alpha) {
-        delegate.setAlpha(alpha);
+        throw new UnsupportedOperationException("TransparentImage alpha is not supported");
     }
 
     /**
@@ -83,7 +92,7 @@ public class TransparentImage extends Image {
      * @return the alpha value
      */
     public int getAlpha() {
-        return delegate.getAlpha();
+        throw new UnsupportedOperationException("TransparentImage alpha is not supported");
     }
 
     /**
@@ -92,7 +101,7 @@ public class TransparentImage extends Image {
      * @return the graphics object
      */
     public final Graphics getGraphics() {
-        return delegate.getGraphics();
+        throw new UnsupportedOperationException("TransparentImage graphics are not supported");
     }
 
     /**
@@ -122,5 +131,9 @@ public class TransparentImage extends Image {
     @Override
     protected BufferedImage renderForDisplayImpl() {
         return renderImage(delegate);
+    }
+
+    private void ensureActive() {
+        delegate.getWidth();
     }
 }

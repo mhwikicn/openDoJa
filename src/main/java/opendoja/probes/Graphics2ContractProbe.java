@@ -14,9 +14,12 @@ import javax.imageio.stream.MemoryCacheImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Iterator;
 
 public final class Graphics2ContractProbe {
+    private static final String CURRENT_JAM_PATH_PROPERTY = "opendoja.currentJamPath";
     private static final int RED = 0xFFFF0000;
     private static final int BLUE = 0xFF0000FF;
     private static final int GREEN = 0xFF00FF00;
@@ -28,14 +31,15 @@ public final class Graphics2ContractProbe {
 
     public static void main(String[] args) throws Exception {
         System.setProperty("java.awt.headless", "true");
-
-        verifyCoordinateAndRenderModeValidation();
-        verifyGetImageContract();
-        verifyAffineImageContract();
-        verifyDrawNthImageContract();
-        verifyDrawSpriteSetContract();
-        verifyDrawNumberValidation();
-        verifyIntermediateColorValidation();
+        withProfile("DoJa-2.0", () -> {
+            verifyCoordinateAndRenderModeValidation();
+            verifyGetImageContract();
+            verifyAffineImageContract();
+            verifyDrawNthImageContract();
+            verifyDrawSpriteSetContract();
+            verifyDrawNumberValidation();
+            verifyIntermediateColorValidation();
+        });
 
         System.out.println("Graphics2 contract probe OK");
     }
@@ -247,6 +251,29 @@ public final class Graphics2ContractProbe {
                     + " actual=" + throwable.getClass().getName(), throwable);
         }
         throw new IllegalStateException(label + " expected exception " + expected.getName());
+    }
+
+    private static void withProfile(String profile, ThrowingRunnable runnable) throws Exception {
+        String previousJamPath = System.getProperty(CURRENT_JAM_PATH_PROPERTY);
+        Path jamPath = Files.createTempFile("graphics2-contract-", ".jam");
+        try {
+            Files.writeString(jamPath, "ProfileVer=" + profile + "\n");
+            System.setProperty(CURRENT_JAM_PATH_PROPERTY, jamPath.toString());
+            try {
+                runnable.run();
+            } catch (Exception exception) {
+                throw exception;
+            } catch (Throwable throwable) {
+                throw new IllegalStateException("Unexpected probe failure", throwable);
+            }
+        } finally {
+            if (previousJamPath == null) {
+                System.clearProperty(CURRENT_JAM_PATH_PROPERTY);
+            } else {
+                System.setProperty(CURRENT_JAM_PATH_PROPERTY, previousJamPath);
+            }
+            Files.deleteIfExists(jamPath);
+        }
     }
 
     @FunctionalInterface

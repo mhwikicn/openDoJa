@@ -1,6 +1,7 @@
 package com.nttdocomo.ui;
 
 import com.nttdocomo.lang.UnsupportedOperationException;
+import opendoja.host.DoJaProfile;
 import opendoja.host.DesktopSurface;
 
 import java.awt.Color;
@@ -295,6 +296,9 @@ final class DesktopImage extends Image {
     @Override
     public void setTransparentEnabled(boolean transparentEnabled) {
         ensureNotDisposed();
+        if (!supportsExplicitTransparencyAndAlpha()) {
+            return;
+        }
         if (!mutable && transparentGifImage && originalTransparencyPresent && transparentEnabled) {
             originalTransparencySuppressed = true;
         }
@@ -310,12 +314,18 @@ final class DesktopImage extends Image {
         if (alpha < 0 || alpha > 255) {
             throw new IllegalArgumentException("alpha out of range: " + alpha);
         }
+        if (!supportsExplicitTransparencyAndAlpha()) {
+            return;
+        }
         this.alpha = alpha;
     }
 
     @Override
     public int getAlpha() {
         ensureNotDisposed();
+        if (!supportsExplicitTransparencyAndAlpha()) {
+            return 255;
+        }
         return alpha;
     }
 
@@ -348,7 +358,9 @@ final class DesktopImage extends Image {
     }
 
     void ensureNotDisposed() {
-        if (disposed) {
+        // DoJa-2.0+ mandates ILLEGAL_STATE after dispose(); DoJa-1.0 leaves use-after-dispose
+        // machine-dependent, so keep legacy access available on pre-2.0 profiles.
+        if (disposed && DoJaProfile.current().isAtLeast(2, 0)) {
             throw new UIException(UIException.ILLEGAL_STATE, "Image is disposed");
         }
     }
@@ -379,6 +391,19 @@ final class DesktopImage extends Image {
             return opaqueImage;
         }
         return surface.image();
+    }
+
+    BufferedImage copyOpaqueSourceForTransparentImage() {
+        if (disposed) {
+            throw new UIException(UIException.ILLEGAL_STATE, "Image is disposed");
+        }
+        // TransparentImage copies the decoded pixels directly and must not inherit any active
+        // alpha or transparent-color rendering state from this Image instance.
+        return copyOpaqueImage(surface.image());
+    }
+
+    private static boolean supportsExplicitTransparencyAndAlpha() {
+        return DoJaProfile.current().isAtLeast(5, 0);
     }
 
     private static boolean hasTransparentPixels(BufferedImage image) {

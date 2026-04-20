@@ -1292,6 +1292,15 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         return 0xFF000000 | (pixel & 0x00FFFFFF);
     }
 
+    private static int effectiveImageAlpha(Image image) {
+        try {
+            return image.getAlpha();
+        } catch (com.nttdocomo.lang.UnsupportedOperationException ignored) {
+            // Extended image types such as TransparentImage are always drawn fully opaque here.
+            return 255;
+        }
+    }
+
     /**
      * Draws image.
      */
@@ -1352,8 +1361,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             Composite savedComposite = graphics.getComposite();
             try {
                 applyFlipTransform(graphics, localBounds.x, localBounds.y, localBounds.width, localBounds.height);
-                if (image.getAlpha() < 255) {
-                    graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, image.getAlpha() / 255.0f));
+                int imageAlpha = effectiveImageAlpha(image);
+                if (imageAlpha < 255) {
+                    graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, imageAlpha / 255.0f));
                 }
                 graphics.drawImage(clippedSource, drawTransform, null);
             } finally {
@@ -1368,8 +1378,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             applyFlipTransform(localBounds.x, localBounds.y, localBounds.width, localBounds.height);
             AffineTransform drawTransform = new AffineTransform(localTransform);
             drawTransform.preConcatenate(AffineTransform.getTranslateInstance(originX, originY));
-            if (image.getAlpha() < 255) {
-                delegate.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, image.getAlpha() / 255.0f));
+            int imageAlpha = effectiveImageAlpha(image);
+            if (imageAlpha < 255) {
+                delegate.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, imageAlpha / 255.0f));
             }
             delegate.drawImage(clippedSource, drawTransform, null);
         } finally {
@@ -1486,8 +1497,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
             Composite savedComposite = graphics.getComposite();
             try {
                 applyFlipTransform(graphics, dx, dy, dw, dh);
-                if (image.getAlpha() < 255) {
-                    graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, image.getAlpha() / 255.0f));
+                int imageAlpha = effectiveImageAlpha(image);
+                if (imageAlpha < 255) {
+                    graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, imageAlpha / 255.0f));
                 }
                 graphics.drawImage(source, destX1, destY1, destX2, destY2, clippedSrcX1, clippedSrcY1, clippedSrcX2, clippedSrcY2, null);
             } finally {
@@ -1501,8 +1513,9 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         AffineTransform oldTransform = delegate.getTransform();
         try {
             applyFlipTransform(dx, dy, dw, dh);
-            if (image.getAlpha() < 255) {
-                delegate.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, image.getAlpha() / 255.0f));
+            int imageAlpha = effectiveImageAlpha(image);
+            if (imageAlpha < 255) {
+                delegate.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, imageAlpha / 255.0f));
             }
             delegate.drawImage(source, destX1, destY1, destX2, destY2, clippedSrcX1, clippedSrcY1, clippedSrcX2, clippedSrcY2, null);
             delegate.setComposite(AlphaComposite.SrcOver);
