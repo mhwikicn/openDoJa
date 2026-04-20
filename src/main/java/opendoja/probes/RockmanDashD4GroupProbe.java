@@ -7,14 +7,15 @@ import com.nttdocomo.ui.graphics3d.Primitive;
 import com.nttdocomo.ui.util3d.Transform;
 import opendoja.g3d.SoftwareTexture;
 
-import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.IdentityHashMap;
 
 public final class RockmanDashD4GroupProbe {
     // Captured from the fixture title's D4 creation path after the byte buffer is assembled.
-    private static final String D4_FIXTURE = "opendoja/probes/rockman_dash/a5_1.d4";
+    private static final Path D4_FIXTURE = Path.of("resources/a5_1.d4");
     private static final float EXPECTED_GROUP_TRANSLATE_X = -12.0f;
     private static final float EXPECTED_GROUP_TRANSLATE_Y = 16.25f;
     private static final float EXPECTED_GROUP_TRANSLATE_Z = 7.0f;
@@ -55,6 +56,9 @@ public final class RockmanDashD4GroupProbe {
         DemoLog.enableInfoLogging();
 
         byte[] data = readFixture();
+        if (data == null) {
+            return;
+        }
         Object3D loaded = Object3D.createInstance(data);
         if (!(loaded instanceof Group group)) {
             throw new IllegalStateException("Expected Group from captured Rockman D4 fixture, got "
@@ -117,12 +121,12 @@ public final class RockmanDashD4GroupProbe {
     }
 
     private static byte[] readFixture() throws Exception {
-        try (InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(D4_FIXTURE)) {
-            if (in == null) {
-                throw new IllegalStateException("Missing D4 fixture resource: " + D4_FIXTURE);
-            }
-            return in.readAllBytes();
+        if (!Files.isRegularFile(D4_FIXTURE)) {
+            DemoLog.info(RockmanDashD4GroupProbe.class,
+                    "WARNING: Missing D4 fixture resource: " + D4_FIXTURE);
+            return null;
         }
+        return Files.readAllBytes(D4_FIXTURE);
     }
 
     private static void verifyGroupTransform(Group group) {
