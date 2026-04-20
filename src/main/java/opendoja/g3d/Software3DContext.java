@@ -8,6 +8,7 @@ import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 
 public final class Software3DContext {
@@ -422,7 +423,7 @@ public final class Software3DContext {
                 addProjectedPerspectiveFigureQuad(projected, transformed, textureCoords, color, polygonTexture,
                         centerX, centerY, originX, originY, surfaceWidth, surfaceHeight, projection, invertScreenY,
                         polygon.doubleSided() || !CULL_FIGURES, polygonTexture != null && polygon.transparent(),
-                        effectiveBlendOp, true, fog, sphereTexture, toonShader);
+                        effectiveBlendOp, false, fog, sphereTexture, toonShader);
                 continue;
             }
             if (projection != null) {
@@ -469,26 +470,28 @@ public final class Software3DContext {
                 if (indices.length == 4 && vertexCount == 4) {
                     addProjectedFigureQuad(projected, xs, ys, depthValues, color, avgDepth, polygonTexture, textureCoords,
                             projection != null, polygon.doubleSided() || !CULL_FIGURES, polygon.transparent(),
-                            effectiveBlendOp, true, fog, sphereTexture, toonShader);
+                            effectiveBlendOp, false, fog, sphereTexture, toonShader);
                 } else {
                     addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, polygonTexture, textureCoords,
                             null,
                             projection != null, polygon.doubleSided() || !CULL_FIGURES, polygon.transparent(),
-                            effectiveBlendOp, true, true, fog, sphereTexture, toonShader);
+                            effectiveBlendOp, false, false, fog, sphereTexture, toonShader);
                 }
                 continue;
             }
             if (indices.length == 4 && vertexCount == 4) {
                 addProjectedFigureQuad(projected, xs, ys, depthValues, color, avgDepth, null, null,
                         projection != null, polygon.doubleSided() || !CULL_FIGURES, false,
-                        effectiveBlendOp, true, fog, sphereTexture, toonShader);
+                        effectiveBlendOp, false, fog, sphereTexture, toonShader);
             } else {
                 addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, null, null,
                         null,
-                        projection != null, polygon.doubleSided() || !CULL_FIGURES, false, effectiveBlendOp, true,
-                        true, fog, sphereTexture, toonShader);
+                        projection != null, polygon.doubleSided() || !CULL_FIGURES, false, effectiveBlendOp, false,
+                        false, fog, sphereTexture, toonShader);
             }
         }
+        // Native opt figures are queued by one face-depth key before the no-z span rasterizer runs.
+        projected.sort(Comparator.comparing(ProjectedPolygon::depth).reversed());
         if (DEBUG_3D && !debugFigureStatsLogged && projection != null && model.polygons().length >= 200) {
             debugFigureStatsLogged = true;
             String figureMessage = "3D debug figure polygons=" + model.polygons().length
@@ -886,7 +889,7 @@ public final class Software3DContext {
                 doubleSided,
                 transparentPaletteZero,
                 blendOp,
-                true,
+                false,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -910,7 +913,7 @@ public final class Software3DContext {
                 doubleSided,
                 transparentPaletteZero,
                 blendOp,
-                true,
+                false,
                 depthWrite,
                 fog,
                 sphereTexture,
@@ -1822,7 +1825,7 @@ public final class Software3DContext {
         }
         avgDepth /= vertexCount;
         addProjectedFaces(projected, xs, ys, depthValues, color, avgDepth, texture, clipped.textureCoords(),
-                null, true, doubleSided, transparentPaletteZero, blendOp, true, depthWrite,
+                null, true, doubleSided, transparentPaletteZero, blendOp, false, depthWrite,
                 fog, sphereTexture, toonShader);
     }
 
