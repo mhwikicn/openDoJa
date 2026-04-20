@@ -299,6 +299,9 @@ class _BitmapFont extends Font {
                 if (glyphCount > codePoints.length) {
                     throw new IOException("Glyph table for height " + height + " exceeds code-point table");
                 }
+                // The stored bitmap height includes bottom padding. Use that padding as descent so
+                // baseline placement matches the handset strike instead of inventing extra rows.
+                int descent = inferDescent(height, bytesPerRow, bytesPerGlyph, glyphData, glyphCount);
                 Map<Integer, Integer> codePointToGlyph = new HashMap<>(glyphCount * 2);
                 for (int i = 0; i < glyphCount; i++) {
                     codePointToGlyph.put(codePoints[i], i);
@@ -312,8 +315,8 @@ class _BitmapFont extends Font {
                         glyphData,
                         codePointToGlyph,
                         questionMarkIndex,
-                        inferredBaseline(height),
-                        inferredDescent(height),
+                        height - descent,
+                        descent,
                         height
                 ));
             }
@@ -350,12 +353,27 @@ class _BitmapFont extends Font {
         return ((height + 7) / 8) * 8;
     }
 
-    private static int inferredBaseline(int height) {
-        return height - inferredDescent(height);
+    private static int inferDescent(int height, int bytesPerRow, int bytesPerGlyph, byte[] glyphData, int glyphCount) {
+        int maxVisibleRow = -1;
+        for (int glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++) {
+            int glyphOffset = glyphIndex * bytesPerGlyph;
+            for (int row = 0; row < height; row++) {
+                int rowOffset = glyphOffset + row * bytesPerRow;
+                if (hasSetBit(glyphData, rowOffset, bytesPerRow)) {
+                    maxVisibleRow = Math.max(maxVisibleRow, row);
+                }
+            }
+        }
+        return maxVisibleRow < 0 ? 0 : height - 1 - maxVisibleRow;
     }
 
-    private static int inferredDescent(int height) {
-        return 2;
+    private static boolean hasSetBit(byte[] data, int offset, int length) {
+        for (int i = 0; i < length; i++) {
+            if (data[offset + i] != 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private record Strike(
