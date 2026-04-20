@@ -1855,6 +1855,17 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
         doja3D.flushPendingOptPrimitiveBlends(delegate, surface.image());
     }
 
+    private void finish3DDepthPassOnProjectionDepthModeChange(boolean projectionDepthModeChanged) {
+        if (!projectionDepthModeChanged || !pendingOptRenderedContent) {
+            return;
+        }
+        // Perspective and parallel draws encode depth differently. End the current pass
+        // so later HUD-style 3D draws keep their pixels but get fresh depth.
+        flushPending3DPasses();
+        pendingOptRenderedContent = false;
+        surface.endDepthFrame();
+    }
+
     private void prepare3DDepthFrame() {
         // Games can submit 3D assets through separate 3D calls inside one
         // lock/unlock frame. They must share one z-buffer or later props ignore ramp depth.
@@ -1947,7 +1958,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setParallelView(int width, int height) {
         try {
-            doja3D.setParallelView(width, height);
+            finish3DDepthPassOnProjectionDepthModeChange(doja3D.setParallelView(width, height));
         } catch (RuntimeException e) {
             throw traceFailure("setParallelView", e);
         }
@@ -1959,7 +1970,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspectiveView(float a, float b, int c, int d) {
         try {
-            doja3D.setPerspectiveView(a, b, c, d);
+            finish3DDepthPassOnProjectionDepthModeChange(doja3D.setPerspectiveView(a, b, c, d));
         } catch (RuntimeException e) {
             throw traceFailure("setPerspectiveView(float,float,int,int)", e);
         }
@@ -1971,7 +1982,7 @@ public class Graphics implements com.nttdocomo.ui.graphics3d.Graphics3D, com.ntt
     @Override
     public void setPerspectiveView(float a, float b, float c) {
         try {
-            doja3D.setPerspectiveView(a, b, c);
+            finish3DDepthPassOnProjectionDepthModeChange(doja3D.setPerspectiveView(a, b, c));
         } catch (RuntimeException e) {
             throw traceFailure("setPerspectiveView(float,float,float)", e);
         }

@@ -67,27 +67,33 @@ public final class Software3DContext {
         this.uiClip = new Rectangle(x, y, width, height);
     }
 
-    public void setUiParallelView(int width, int height) {
+    public boolean setUiParallelView(int width, int height) {
+        boolean changedDepthMode = uiPerspective;
         this.uiPerspective = false;
         this.uiOrthoWidth = java.lang.Math.max(1f, width);
         this.uiOrthoHeight = java.lang.Math.max(1f, height);
+        return changedDepthMode;
     }
 
-    public void setUiPerspectiveView(float a, float b, int c, int d) {
+    public boolean setUiPerspectiveView(float a, float b, int c, int d) {
+        boolean changedDepthMode = !uiPerspective;
         this.uiPerspective = true;
         this.uiPerspectiveMode = PerspectiveMode.WIDTH_HEIGHT;
         this.uiPerspectiveNear = normalizeNear(a);
         this.uiPerspectiveFar = normalizeFar(uiPerspectiveNear, b);
         this.uiPerspectiveWidth = java.lang.Math.max(1f, c);
         this.uiPerspectiveHeight = java.lang.Math.max(1f, d);
+        return changedDepthMode;
     }
 
-    public void setUiPerspectiveView(float a, float b, float c) {
+    public boolean setUiPerspectiveView(float a, float b, float c) {
+        boolean changedDepthMode = !uiPerspective;
         this.uiPerspective = true;
         this.uiPerspectiveMode = PerspectiveMode.FIELD_OF_VIEW;
         this.uiPerspectiveNear = normalizeNear(a);
         this.uiPerspectiveFar = normalizeFar(uiPerspectiveNear, b);
         this.uiPerspectiveAngleDegrees = normalizePerspectiveDegrees(c);
+        return changedDepthMode;
     }
 
     public void setUiTransform(float[] matrix) {

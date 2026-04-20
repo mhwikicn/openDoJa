@@ -39,25 +39,28 @@ public final class DojaGraphics3DRenderer {
         context.setUiClip(originX + x, originY + y, width, height);
     }
 
-    public void setParallelView(int width, int height) {
-        context.setUiParallelView(width, height);
+    public boolean setParallelView(int width, int height) {
+        boolean changedDepthMode = context.setUiParallelView(width, height);
         if (traceCalls) {
             OpenDoJaLog.debug(DojaGraphics3DRenderer.class, () -> "3D call setParallelView width=" + width + " height=" + height);
         }
+        return changedDepthMode;
     }
 
-    public void setPerspectiveView(float a, float b, int c, int d) {
-        context.setUiPerspectiveView(a, b, c, d);
+    public boolean setPerspectiveView(float a, float b, int c, int d) {
+        boolean changedDepthMode = context.setUiPerspectiveView(a, b, c, d);
         if (traceCalls) {
             OpenDoJaLog.debug(DojaGraphics3DRenderer.class, () -> "3D call setPerspectiveViewWH near=" + a + " far=" + b + " width=" + c + " height=" + d);
         }
+        return changedDepthMode;
     }
 
-    public void setPerspectiveView(float a, float b, float c) {
-        context.setUiPerspectiveView(a, b, c);
+    public boolean setPerspectiveView(float a, float b, float c) {
+        boolean changedDepthMode = context.setUiPerspectiveView(a, b, c);
         if (traceCalls) {
             OpenDoJaLog.debug(DojaGraphics3DRenderer.class, () -> "3D call setPerspectiveViewFov near=" + a + " far=" + b + " angle=" + c);
         }
+        return changedDepthMode;
     }
 
     public void setTransform(Transform transform) {
