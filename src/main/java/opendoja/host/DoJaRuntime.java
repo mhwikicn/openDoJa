@@ -108,7 +108,8 @@ public final class DoJaRuntime {
         this.externalFrameRenderer = new ExternalFrameRenderer(
                 resolveExternalFrameEnabled(config),
                 config.statusBarIconDevice(),
-                config.iAppliType());
+                config.iAppliType(),
+                config.launchType());
         this.openGlesFpsOverlay = new OpenGlesFpsOverlay();
         this.openGlesFpsEnabled = OpenDoJaLaunchArgs.getBoolean(OpenDoJaLaunchArgs.SHOW_OPEN_GLES_FPS);
         if (openGlesFpsEnabled) {

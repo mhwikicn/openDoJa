@@ -27,12 +27,18 @@ public final class ExternalFrameRenderer {
     private final List<HostOverlayRenderer> overlays = new CopyOnWriteArrayList<>();
     private final StatusBarIcons statusBarIcons;
     private final LaunchConfig.IAppliType iAppliType;
+    private final boolean standbyLaunch;
     private volatile boolean enabled;
 
     public ExternalFrameRenderer(boolean enabled, String statusBarIconDevice, LaunchConfig.IAppliType iAppliType) {
+        this(enabled, statusBarIconDevice, iAppliType, com.nttdocomo.ui.IApplication.LAUNCHED_FROM_MENU);
+    }
+
+    public ExternalFrameRenderer(boolean enabled, String statusBarIconDevice, LaunchConfig.IAppliType iAppliType, int launchType) {
         this.enabled = enabled;
         this.statusBarIcons = StatusBarIcons.load(statusBarIconDevice);
         this.iAppliType = iAppliType == null ? LaunchConfig.IAppliType.I_APPLI : iAppliType;
+        this.standbyLaunch = launchType == com.nttdocomo.ui.IApplication.LAUNCHED_AS_CONCIERGE;
     }
 
     boolean enabled() {
@@ -273,7 +279,14 @@ public final class ExternalFrameRenderer {
     }
 
     private BufferedImage iAppliStatusIcon() {
-        return iAppliType == LaunchConfig.IAppliType.I_APPLI_DX ? statusBarIcons.iAppliDx() : statusBarIcons.iAppli();
+        if (iAppliType == LaunchConfig.IAppliType.I_APPLI_DX) {
+            return standbyLaunch && statusBarIcons.iAppliDxStandby() != null
+                    ? statusBarIcons.iAppliDxStandby()
+                    : statusBarIcons.iAppliDx();
+        }
+        return standbyLaunch && statusBarIcons.iAppliStandby() != null
+                ? statusBarIcons.iAppliStandby()
+                : statusBarIcons.iAppli();
     }
 
     private BufferedImage batteryStatusIcon() {
@@ -366,7 +379,9 @@ public final class ExternalFrameRenderer {
             BufferedImage signal3,
             BufferedImage noSignal,
             BufferedImage iAppli,
+            BufferedImage iAppliStandby,
             BufferedImage iAppliDx,
+            BufferedImage iAppliDxStandby,
             BufferedImage battery0,
             BufferedImage battery1,
             BufferedImage battery2,
@@ -389,7 +404,7 @@ public final class ExternalFrameRenderer {
                 }
             }
             OpenDoJaLog.warn(ExternalFrameRenderer.class, "Status bar icons unavailable; leaving the top bar blank");
-            return new StatusBarIcons(null, null, null, null, null, null, null, null, null, null, null);
+            return new StatusBarIcons(null, null, null, null, null, null, null, null, null, null, null, null, null);
         }
 
         private static StatusBarIcons loadFamily(String family) {
@@ -400,7 +415,9 @@ public final class ExternalFrameRenderer {
                 BufferedImage signal3 = loadImage(family, "signal_3.png");
                 BufferedImage noSignal = loadImage(family, "no_signal.png");
                 BufferedImage iAppli = loadImage(family, "i-appli.png");
+                BufferedImage iAppliStandby = loadImage(family, "i-appli_standby.png");
                 BufferedImage iAppliDx = loadImage(family, "i-appli_dx.png", "i-apply_dx.png");
+                BufferedImage iAppliDxStandby = loadImage(family, "i-appli_dx_standby.png", "i-apply_dx_standby.png");
                 BufferedImage battery0 = loadImage(family, "battery_0.png");
                 BufferedImage battery1 = loadImage(family, "battery_1.png");
                 BufferedImage battery2 = loadImage(family, "battery_2.png");
@@ -411,7 +428,7 @@ public final class ExternalFrameRenderer {
                     return null;
                 }
                 return new StatusBarIcons(signalAntenna, signal1, signal2, signal3, noSignal,
-                        iAppli, iAppliDx, battery0, battery1, battery2, battery3);
+                        iAppli, iAppliStandby, iAppliDx, iAppliDxStandby, battery0, battery1, battery2, battery3);
             } catch (IOException e) {
                 OpenDoJaLog.warn(ExternalFrameRenderer.class,
                         "Failed to load status bar icon family '" + family + "'", e);
@@ -444,7 +461,8 @@ public final class ExternalFrameRenderer {
 
         private boolean isEmpty() {
             return signalAntenna == null && signal1 == null && signal2 == null && signal3 == null
-                    && noSignal == null && iAppli == null && iAppliDx == null
+                    && noSignal == null && iAppli == null && iAppliStandby == null && iAppliDx == null
+                    && iAppliDxStandby == null
                     && battery0 == null && battery1 == null && battery2 == null && battery3 == null;
         }
     }

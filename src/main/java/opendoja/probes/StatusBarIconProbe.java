@@ -20,17 +20,21 @@ public final class StatusBarIconProbe {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length != 2) {
-            throw new IllegalArgumentException("Usage: StatusBarIconProbe <jam-path> <output-png>");
+        if (args.length != 2 && args.length != 3) {
+            throw new IllegalArgumentException("Usage: StatusBarIconProbe <jam-path> <output-png> [normal|standby]");
         }
         Path jamPath = Path.of(args[0]);
         Path outputPath = Path.of(args[1]);
-        LaunchConfig config = JamLauncher.buildLaunchConfig(jamPath, false);
+        LaunchConfig.LaunchTypeOption launchType = args.length == 3
+                ? requireLaunchType(args[2])
+                : LaunchConfig.LaunchTypeOption.resolveConfigured();
+        LaunchConfig config = JamLauncher.buildLaunchConfig(jamPath, false, launchType);
 
         ExternalFrameRenderer renderer = new ExternalFrameRenderer(
                 true,
                 config.statusBarIconDevice(),
-                config.iAppliType());
+                config.iAppliType(),
+                config.launchType());
         ExternalFrameLayout layout = renderer.layoutFor(config.width(), config.height(), HOST_SCALE);
         BufferedImage image = new BufferedImage(layout.preferredSize().width, layout.preferredSize().height,
                 BufferedImage.TYPE_INT_ARGB);
@@ -49,9 +53,19 @@ public final class StatusBarIconProbe {
 
         writeImage(image, outputPath);
         System.out.println("iAppliType=" + config.iAppliType());
+        System.out.println("launchType=" + launchType.id);
         System.out.println("iconDevice=" + config.statusBarIconDevice());
         System.out.println("topBarNonBackgroundPixels=" + countTopBarNonBackgroundPixels(image));
+        System.out.println("topBarFingerprint=" + topBarFingerprint(image));
         System.out.println("output=" + outputPath.toAbsolutePath());
+    }
+
+    private static LaunchConfig.LaunchTypeOption requireLaunchType(String value) {
+        LaunchConfig.LaunchTypeOption launchType = LaunchConfig.LaunchTypeOption.fromId(value);
+        if (launchType == null) {
+            throw new IllegalArgumentException("Unknown launch type: " + value + ". Expected normal or standby.");
+        }
+        return launchType;
     }
 
     private static void writeImage(BufferedImage image, Path outputPath) throws IOException {
@@ -72,5 +86,16 @@ public final class StatusBarIconProbe {
             }
         }
         return count;
+    }
+
+    private static String topBarFingerprint(BufferedImage image) {
+        long hash = 0xcbf29ce484222325L;
+        for (int y = 0; y < 18 && y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                hash ^= image.getRGB(x, y);
+                hash *= 0x100000001b3L;
+            }
+        }
+        return Long.toUnsignedString(hash, 16);
     }
 }
