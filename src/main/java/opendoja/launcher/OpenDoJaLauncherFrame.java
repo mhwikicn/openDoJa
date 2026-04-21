@@ -105,24 +105,7 @@ final class OpenDoJaLauncherFrame extends JFrame {
             }
         }));
         settingsMenu.addSeparator();
-        settingsMenu.add(new JMenuItem(new AbstractAction("HTTP Host Override...") {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                updateHttpOverrideDomain();
-            }
-        }));
-        settingsMenu.add(new JMenuItem(new AbstractAction("Encoding Override...") {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                updateFileEncodingOverride();
-            }
-        }));
-        settingsMenu.add(new JMenuItem(new AbstractAction("Phone Model Override...") {
-            @Override
-            public void actionPerformed(ActionEvent event) {
-                updateMicroeditionPlatformOverride();
-            }
-        }));
+        settingsMenu.add(buildOverridesMenu());
         settingsMenu.addSeparator();
         settingsMenu.add(new JMenuItem(new AbstractAction("Keybinds...") {
             @Override
@@ -146,6 +129,35 @@ final class OpenDoJaLauncherFrame extends JFrame {
         menuBar.add(settingsMenu);
         menuBar.add(helpMenu);
         return menuBar;
+    }
+
+    private JMenu buildOverridesMenu() {
+        JMenu overridesMenu = new JMenu("Overrides");
+        overridesMenu.add(new JMenuItem(new AbstractAction("HTTP Host Override...") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                updateHttpOverrideDomain();
+            }
+        }));
+        overridesMenu.add(new JMenuItem(new AbstractAction("Encoding Override...") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                updateFileEncodingOverride();
+            }
+        }));
+        overridesMenu.add(new JMenuItem(new AbstractAction("System Font Override...") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                updateSystemFontOverride();
+            }
+        }));
+        overridesMenu.add(new JMenuItem(new AbstractAction("Phone Model Override...") {
+            @Override
+            public void actionPerformed(ActionEvent event) {
+                updateMicroeditionPlatformOverride();
+            }
+        }));
+        return overridesMenu;
     }
 
     private JPanel buildContent() {
@@ -539,6 +551,15 @@ final class OpenDoJaLauncherFrame extends JFrame {
             return;
         }
         jamLaunchService.saveSettings(current.withFileEncodingOverride(updated));
+    }
+
+    private void updateSystemFontOverride() {
+        LauncherSettings current = jamLaunchService.loadSettings();
+        String updated = settingsController.promptSystemFontOverride(this, current.systemFontOverride());
+        if (updated == null) {
+            return;
+        }
+        jamLaunchService.saveSettings(current.withSystemFontOverride(updated));
     }
 
     private void updateMicroeditionPlatformOverride() {

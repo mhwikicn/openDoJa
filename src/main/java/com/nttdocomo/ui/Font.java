@@ -686,6 +686,10 @@ public class Font {
     }
 
     private static String resolveFamily(int face) {
+        String configuredOverride = OpenDoJaLaunchArgs.systemFontOverride();
+        if (!configuredOverride.isBlank()) {
+            return configuredOverride;
+        }
         return DesktopFontSets.resolveFamily(face, Locale.getDefault(), availableFamilies());
     }
 

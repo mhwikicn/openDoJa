@@ -101,6 +101,8 @@ public final class OpenDoJaLaunchArgs {
     public static final String FINGERPRINT_MAX_CANDIDATES = "opendoja.fingerprint.maxCandidates";
     /** UI font renderer type: bitmap or system. */
     public static final String FONT_TYPE = "opendoja.fontType";
+    /** Overrides the resolved desktop system-font family when system fonts are enabled. */
+    public static final String SYSTEM_FONT_OVERRIDE = "opendoja.systemFontOverride";
     /** Scale factor applied to handset font sizing. */
     public static final String FONT_SCALE = "opendoja.fontScale";
     /** Selects the FueTrek mixer profile variant. */
@@ -317,6 +319,7 @@ public final class OpenDoJaLaunchArgs {
             FINGERPRINT_MATCH_ID,
             FINGERPRINT_MAX_CANDIDATES,
             FONT_TYPE,
+            SYSTEM_FONT_OVERRIDE,
             FONT_SCALE,
             FUETREK_MIX_PROFILE,
             OPEN_GLES_RENDERER,
@@ -425,6 +428,10 @@ public final class OpenDoJaLaunchArgs {
         return normalizeMicroeditionPlatformOverride(get(MICROEDITION_PLATFORM_OVERRIDE, ""));
     }
 
+    public static String systemFontOverride() {
+        return normalizeSystemFontOverride(get(SYSTEM_FONT_OVERRIDE, ""));
+    }
+
     public static String launchType() {
         return normalizeLaunchType(get(LAUNCH_TYPE, ""));
     }
@@ -515,6 +522,10 @@ public final class OpenDoJaLaunchArgs {
         return candidate == null ? "" : candidate.trim();
     }
 
+    public static String normalizeSystemFontOverride(String candidate) {
+        return candidate == null ? "" : candidate.trim();
+    }
+
     public static String normalizeLaunchType(String candidate) {
         return LaunchConfig.LaunchTypeOption.normalizeId(candidate);
     }
@@ -595,6 +606,7 @@ public final class OpenDoJaLaunchArgs {
         defaults.put(FINGERPRINT_MATCH_ID, () -> "0");
         defaults.put(FINGERPRINT_MAX_CANDIDATES, () -> "16");
         defaults.put(FONT_TYPE, () -> LaunchConfig.FontType.BITMAP.id);
+        defaults.put(SYSTEM_FONT_OVERRIDE, () -> "");
         defaults.put(FONT_SCALE, () -> "0.85");
         defaults.put(FUETREK_MIX_PROFILE, () -> "0");
         defaults.put(OPEN_GLES_RENDERER, () -> OpenGlesRendererMode.SOFTWARE.id());

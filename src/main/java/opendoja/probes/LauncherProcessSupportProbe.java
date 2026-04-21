@@ -45,6 +45,7 @@ public final class LauncherProcessSupportProbe {
         verifyBuildLaunchCommandAddsExpectedFileEncoding(expectedEncoding);
         verifySpawnedJamSeesExpectedFileEncoding(expectedEncoding);
         verifyLauncherSettingsOverrideEncoding();
+        verifyLauncherSettingsForwardSystemFontOverride();
         verifyLauncherSettingsForwardFullscreenHostScale();
         verifyLauncherSettingsForwardStandbyLaunchType();
         verifyLauncherSettingsForwardActiveKeybindProfile();
@@ -106,6 +107,22 @@ public final class LauncherProcessSupportProbe {
         check(command.stream().filter(arg -> arg.startsWith("-Dfile.encoding=")).count() == 1,
                 "launch command should contain exactly one file.encoding argument with launcher override: " + command);
         verifySpawnedJamSeesExpectedFileEncoding(settings, overrideEncoding);
+    }
+
+    private static void verifyLauncherSettingsForwardSystemFontOverride() throws Exception {
+        String overrideFamily = "Noto Sans Mono CJK JP";
+        Object settings = invokeNoArgStatic(launcherSettingsClass(), "defaults");
+        settings = invoke(settings, "withFontType", new Class<?>[]{String.class}, LaunchConfig.FontType.SYSTEM.id);
+        settings = invoke(settings, "withSystemFontOverride", new Class<?>[]{String.class}, overrideFamily);
+        Object selection = newGameLaunchSelection(Path.of("probe.jam"), Path.of("probe.jar"));
+        List<String> command = buildLaunchCommand(selection, settings);
+        String expectedArgument = "-D" + OpenDoJaLaunchArgs.SYSTEM_FONT_OVERRIDE + "=" + overrideFamily;
+        check(command.contains(expectedArgument),
+                "launch command should forward the system font override as " + expectedArgument + " but was " + command);
+
+        Properties properties = readSpawnedProbeProperties(settings);
+        check(overrideFamily.equals(properties.getProperty("systemFontOverride")),
+                "spawned JAM should see the configured system font override");
     }
 
     private static void verifyLauncherSettingsForwardFullscreenHostScale() throws Exception {
@@ -358,6 +375,7 @@ public final class LauncherProcessSupportProbe {
             Properties properties = new Properties();
             properties.setProperty("file.encoding", System.getProperty("file.encoding", "<unset>"));
             properties.setProperty("defaultCharset", Charset.defaultCharset().name());
+            properties.setProperty("systemFontOverride", OpenDoJaLaunchArgs.systemFontOverride());
             properties.setProperty("inputBindings", System.getProperty(OpenDoJaLaunchArgs.INPUT_BINDINGS, "<unset>"));
             properties.setProperty("launchType", Integer.toString(getLaunchType()));
             try (var writer = Files.newBufferedWriter(Path.of(URI.create(outputUri)), StandardCharsets.UTF_8)) {

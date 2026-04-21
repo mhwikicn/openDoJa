@@ -7,6 +7,9 @@ import opendoja.host.OpenDoJaLaunchArgs;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
@@ -95,6 +98,48 @@ final class LauncherSettingsController {
         return entered.trim();
     }
 
+    String promptSystemFontOverride(Component parent, String currentValue) {
+        List<String> installedFonts = installedFontFamilies();
+        while (true) {
+            JComboBox<String> fontPicker = new JComboBox<>(installedFonts.toArray(new String[0]));
+            fontPicker.setEditable(true);
+            fontPicker.setSelectedItem(currentValue == null ? "" : currentValue);
+            fontPicker.setPrototypeDisplayValue("Noto Sans Mono CJK JP");
+
+            JPanel panel = new JPanel(new BorderLayout(0, 8));
+            panel.add(new JLabel("<html>Select the desktop font family to force when <b>Font Type</b> is set to <b>System</b>."
+                    + "<br>Leave blank to use automatic font resolution.</html>"), BorderLayout.NORTH);
+            panel.add(fontPicker, BorderLayout.CENTER);
+
+            int option = JOptionPane.showConfirmDialog(
+                    parent,
+                    panel,
+                    "System Font Override",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.PLAIN_MESSAGE);
+            if (option != JOptionPane.OK_OPTION) {
+                return null;
+            }
+
+            Object selected = fontPicker.getEditor().getItem();
+            String normalized = OpenDoJaLaunchArgs.normalizeSystemFontOverride(selected == null ? "" : selected.toString());
+            if (normalized.isEmpty()) {
+                return "";
+            }
+            String resolvedFamily = resolveInstalledFontFamily(normalized, installedFonts);
+            if (resolvedFamily != null) {
+                return resolvedFamily;
+            }
+
+            JOptionPane.showMessageDialog(
+                    parent,
+                    "Choose one of the installed font families from the list, or leave the field blank to disable the override.",
+                    "System Font Override",
+                    JOptionPane.ERROR_MESSAGE);
+            currentValue = normalized;
+        }
+    }
+
     private String promptValue(Component parent, String title, String currentValue, String prompt) {
         String entered = (String) JOptionPane.showInputDialog(
                 parent,
@@ -105,6 +150,31 @@ final class LauncherSettingsController {
                 null,
                 currentValue);
         return entered == null ? null : entered;
+    }
+
+    private static List<String> installedFontFamilies() {
+        LinkedHashSet<String> names = new LinkedHashSet<>();
+        try {
+            String[] families = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+            Arrays.sort(families, String.CASE_INSENSITIVE_ORDER);
+            names.addAll(Arrays.asList(families));
+        } catch (HeadlessException | AWTError ignored) {
+            // The launcher normally runs with a desktop font environment. If it does not, keep the
+            // dialog functional by returning an empty list and relying on blank disable behavior.
+        }
+        return List.copyOf(new ArrayList<>(names));
+    }
+
+    private static String resolveInstalledFontFamily(String candidate, List<String> installedFonts) {
+        if (installedFonts.isEmpty()) {
+            return candidate;
+        }
+        for (String family : installedFonts) {
+            if (family.equalsIgnoreCase(candidate)) {
+                return family;
+            }
+        }
+        return null;
     }
 
     private static String normalizeHttpOverrideDomain(String candidate) {

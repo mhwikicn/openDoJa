@@ -19,6 +19,7 @@ final class LauncherPreferencesStore {
     private static final String TERMINAL_ID_KEY = "terminalId";
     private static final String USER_ID_KEY = "userId";
     private static final String FONT_TYPE_KEY = "fontType";
+    private static final String SYSTEM_FONT_OVERRIDE_KEY = "systemFontOverride";
     private static final String HTTP_OVERRIDE_DOMAIN_KEY = "httpOverrideDomain";
     private static final String FILE_ENCODING_OVERRIDE_KEY = "fileEncodingOverride";
     private static final String MICROEDITION_PLATFORM_OVERRIDE_KEY = "microeditionPlatformOverride";
@@ -47,6 +48,7 @@ final class LauncherPreferencesStore {
         String storedTerminalId = preferences.get(TERMINAL_ID_KEY, OpenDoJaIdentity.defaultTerminalId());
         String storedUserId = preferences.get(USER_ID_KEY, OpenDoJaIdentity.defaultUserId());
         String storedFontType = preferences.get(FONT_TYPE_KEY, OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.FONT_TYPE));
+        String storedSystemFontOverride = preferences.get(SYSTEM_FONT_OVERRIDE_KEY, OpenDoJaLaunchArgs.systemFontOverride());
         String storedHttpOverrideDomain = preferences.get(HTTP_OVERRIDE_DOMAIN_KEY,
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HTTP_OVERRIDE_DOMAIN, ""));
         String storedFileEncodingOverride = preferences.get(FILE_ENCODING_OVERRIDE_KEY, "");
@@ -76,6 +78,7 @@ final class LauncherPreferencesStore {
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.TERMINAL_ID, storedTerminalId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.USER_ID, storedUserId),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.FONT_TYPE, storedFontType),
+                OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.SYSTEM_FONT_OVERRIDE, storedSystemFontOverride),
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.HTTP_OVERRIDE_DOMAIN, storedHttpOverrideDomain),
                 storedFileEncodingOverride,
                 OpenDoJaLaunchArgs.get(OpenDoJaLaunchArgs.MICROEDITION_PLATFORM_OVERRIDE, storedMicroeditionPlatformOverride),
@@ -95,6 +98,7 @@ final class LauncherPreferencesStore {
         preferences.put(TERMINAL_ID_KEY, settings.terminalId());
         preferences.put(USER_ID_KEY, settings.userId());
         preferences.put(FONT_TYPE_KEY, settings.fontType());
+        preferences.put(SYSTEM_FONT_OVERRIDE_KEY, settings.systemFontOverride());
         preferences.put(HTTP_OVERRIDE_DOMAIN_KEY, settings.httpOverrideDomain());
         preferences.put(FILE_ENCODING_OVERRIDE_KEY, settings.fileEncodingOverride());
         preferences.put(MICROEDITION_PLATFORM_OVERRIDE_KEY, settings.microeditionPlatformOverride());
