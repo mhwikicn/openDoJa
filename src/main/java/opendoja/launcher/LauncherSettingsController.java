@@ -100,10 +100,12 @@ final class LauncherSettingsController {
 
     String promptSystemFontOverride(Component parent, String currentValue) {
         List<String> installedFonts = installedFontFamilies();
-        while (true) {
+        String pendingValue = currentValue;
+        String resolvedFamily = null;
+        while (resolvedFamily == null) {
             JComboBox<String> fontPicker = new JComboBox<>(installedFonts.toArray(new String[0]));
             fontPicker.setEditable(true);
-            fontPicker.setSelectedItem(currentValue == null ? "" : currentValue);
+            fontPicker.setSelectedItem(pendingValue == null ? "" : pendingValue);
             fontPicker.setPrototypeDisplayValue("Noto Sans Mono CJK JP");
 
             JPanel panel = new JPanel(new BorderLayout(0, 8));
@@ -126,18 +128,17 @@ final class LauncherSettingsController {
             if (normalized.isEmpty()) {
                 return "";
             }
-            String resolvedFamily = resolveInstalledFontFamily(normalized, installedFonts);
-            if (resolvedFamily != null) {
-                return resolvedFamily;
+            resolvedFamily = resolveInstalledFontFamily(normalized, installedFonts);
+            if (resolvedFamily == null) {
+                JOptionPane.showMessageDialog(
+                        parent,
+                        "Choose one of the installed font families from the list, or leave the field blank to disable the override.",
+                        "System Font Override",
+                        JOptionPane.ERROR_MESSAGE);
+                pendingValue = normalized;
             }
-
-            JOptionPane.showMessageDialog(
-                    parent,
-                    "Choose one of the installed font families from the list, or leave the field blank to disable the override.",
-                    "System Font Override",
-                    JOptionPane.ERROR_MESSAGE);
-            currentValue = normalized;
         }
+        return resolvedFamily;
     }
 
     private String promptValue(Component parent, String title, String currentValue, String prompt) {
